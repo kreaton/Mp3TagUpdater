@@ -1,10 +1,10 @@
 # Mp3TagUpdater
 
-A .NET 10 console app that scans a folder of `.mp3` files, repairs tag faults that make files unreadable, and logs every file's details, tags and errors to a CSV file.
+A .NET 10 console app that scans a folder of `.mp3` files, repairs tag faults that make files unreadable, and fills in missing Album tags from the folder name.
 
 - **Safe by default:** no mp3 is changed unless you pass `--apply`.
-- **Repairs touch only the tag:** the file keeps its size, the audio bytes aren't moved, and the original is kept as a `.bak` file.
-- **Ready to import:** the CSV log opens in a spreadsheet or loads into a database, and it includes files that couldn't be read.
+- **Quiet console:** it lists only proposed or actual changes, followed by a summary.
+- **Full CSV log:** every file's details, tags and errors go in a log that opens in a spreadsheet or loads into a database. This includes files that couldn't be read.
 
 ## Requirements
 
@@ -25,7 +25,7 @@ Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
 
 | Option | Effect |
 |---|---|
-| `--apply` | Write repairs to disk. Without it, repairs are only reported. |
+| `--apply` | Write repairs and Album tags to disk. Without it, changes are only proposed. |
 | `--no-recursive` | Scan only the top-level directory, not subfolders. |
 | `--no-log` | Don't write the CSV log. |
 | `-h`, `--help` | Show help. |
@@ -36,7 +36,7 @@ Check a folder and write a log, without changing any mp3:
 dotnet run --project Mp3TagUpdater -- "C:\Music\Party"
 ```
 
-Repair any files that can be repaired:
+Write the changes:
 
 ```bash
 dotnet run --project Mp3TagUpdater -- "C:\Music\Party" --apply
@@ -45,18 +45,10 @@ dotnet run --project Mp3TagUpdater -- "C:\Music\Party" --apply
 ### Example output
 
 ```
-=== MP3 Tag Updater ===
-
-Scanning 'C:\Music\Party' (recursive)...
-  Failed to read 'C:\Music\Party\Damaged song.mp3': Unsupported tag version.
-Found 2 mp3 file(s):
-Damaged song.mp3
-Healthy song.mp3
-
-Checking unreadable files (no files will be modified). Pass --apply to repair them:
   [DRY RUN] Would repair Damaged song.mp3: Corrected ID3v2 version byte 0x23 to 0x03
-
-Summary: OK 1, Repairable 1
+  [DRY RUN] Would set Album to "Party": No album.mp3
+Summary: OK 1, Repairable 1, Updatable 1
+No files were modified. Pass --apply to write these changes.
 Log written to C:\Music\Party\mp3-log-20261105-110130.csv
 ```
 
@@ -80,7 +72,7 @@ Every run writes `mp3-log-YYYYMMDD-HHMMSS.csv` to the top of the scanned directo
 
 - **Format:** RFC 4180, comma-separated, UTF-8 with BOM.
 - **Values:** numbers are whole and dates are `yyyy-MM-dd HH:mm:ss`, so they don't depend on locale. A missing value is an empty cell.
-- **Columns:** `Status`, `Errors`, `RepairActions`, `RelativePath`, `Directory`, `FileName`, `FullPath`, `SizeBytes`, `Created`, `Modified`, `Title`, `Artist`, `AlbumArtist`, `Album`, `Genre`, `Composer`, `Comment`, `Year`, `Track`, `TrackCount`, `Disc`, `Duration`, `DurationMs`, `BitrateKbps`, `SampleRateHz`, `Channels`, `TagTypes`, `PictureCount`.
+- **Columns:** `Status`, `Errors`, `Changes`, `RelativePath`, `Directory`, `FileName`, `FullPath`, `SizeBytes`, `Created`, `Modified`, `Title`, `Artist`, `AlbumArtist`, `Album`, `Genre`, `Composer`, `Comment`, `Year`, `Track`, `TrackCount`, `Disc`, `Duration`, `DurationMs`, `BitrateKbps`, `SampleRateHz`, `Channels`, `TagTypes`, `PictureCount`.
 
 | Status | Meaning |
 |---|---|
@@ -88,11 +80,17 @@ Every run writes `mp3-log-YYYYMMDD-HHMMSS.csv` to the top of the scanned directo
 | `Warning` | Readable, but possibly corrupt or containing no MPEG audio, such as a WAV named `.mp3` (reasons are in `Errors`) |
 | `Repairable` | Unreadable on disk, but `--apply` can repair it (tags shown are from the verified repair) |
 | `Repaired` | Was unreadable, and this run repaired it (the original error is in `Errors`) |
+| `Updatable` | Readable and missing its Album tag, which `--apply` would fill in |
+| `Updated` | Was missing its Album tag, and this run filled it in |
 | `Error` | Unreadable, with no automatic repair available |
 
 ## Filling in missing albums
 
-`Mp3Library.UpdateMissingAlbumTags` sets a missing Album tag to the name of the folder containing the file. Its call is currently commented out in `Program.cs`, so the app doesn't change Album tags. If you re-enable it, `--apply` will write album tags as well as repairs.
+A missing Album tag (empty or only whitespace) is set to the name of the folder directly containing the file. A file directly in the scanned directory therefore gets that directory's name. A file that is repaired in the same run can also get an album.
+
+Files with `Error` or `Warning` status are skipped, so tags are never rewritten on a file that may be damaged or not really an mp3.
+
+Each album is saved to a temporary copy that is then swapped in, so a failed save can't damage the original. The modified time is kept, but no `.bak` is made. The `Changes` column of the log records which files were updated.
 
 ## Project structure
 

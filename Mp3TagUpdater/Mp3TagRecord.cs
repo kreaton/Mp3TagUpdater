@@ -17,6 +17,12 @@ public static class Mp3Status
 
     /// <summary>Was unreadable, and has been repaired on disk.</summary>
     public const string Repaired = "Repaired";
+
+    /// <summary>Readable and missing its Album tag, which --apply would fill in.</summary>
+    public const string Updatable = "Updatable";
+
+    /// <summary>Was missing its Album tag, which has been filled in on disk.</summary>
+    public const string Updated = "Updated";
 }
 
 /// <summary>
@@ -64,7 +70,7 @@ public record Mp3TagRecord
     public IReadOnlyList<string> Errors { get; init; } = [];
 
     /// <summary>Changes made to the file, or that --apply would make.</summary>
-    public IReadOnlyList<string> RepairActions { get; init; } = [];
+    public IReadOnlyList<string> Changes { get; init; } = [];
 
     /// <summary>True if the Album tag was empty/missing when the file was first read.</summary>
     public bool AlbumWasMissing => string.IsNullOrWhiteSpace(Album);

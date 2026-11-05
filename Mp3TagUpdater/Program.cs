@@ -5,11 +5,10 @@ namespace Mp3TagUpdater;
 
 public static class Program
 {
+    private static readonly string[] KnownOptions = ["--apply", "--dry-run", "--no-recursive", "--no-log"];
+
     public static int Main(string[] args)
     {
-        Console.WriteLine("=== MP3 Tag Updater ===");
-        Console.WriteLine();
-
         // --- Parse arguments -------------------------------------------------
         // Usage: Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
         //
@@ -17,31 +16,42 @@ public static class Program
         // --apply is explicitly passed. --dry-run is also accepted for
         // clarity/backwards compatibility but has no extra effect.
 
-        if (args.Length == 0 || args.Contains("-h") || args.Contains("--help"))
+        if (args.Contains("-h") || args.Contains("--help"))
         {
             PrintUsage();
-            return args.Length == 0 ? 1 : 0;
+            return 0;
         }
 
-        string directory = args[0];
-        //string directory = @"c:\Users\perhe\Downloads\MP4Player\Audio\GermanMilitary\Musik\";
-        bool apply = args.Contains("--apply");
-        bool dryRun = !apply; // default true unless --apply is given
+        // Options are rejected if misspelled, because a run with --apply writes
+        // to files and shouldn't silently ignore something like --no-recursve.
+        var unknownOption = args.FirstOrDefault(a => a.StartsWith('-') && !KnownOptions.Contains(a));
+        var directories = args.Where(a => !a.StartsWith('-')).ToList();
+
+        if (unknownOption is not null || directories.Count != 1)
+        {
+            if (unknownOption is not null)
+                WriteError($"Unknown option: {unknownOption}");
+            else if (directories.Count > 1)
+                WriteError($"Expected one directory, but got {directories.Count}. Put quotes around a path that contains spaces.");
+
+            PrintUsage();
+            return 1;
+        }
+
+        string directory = directories[0];
+        bool dryRun = !args.Contains("--apply");
         bool recursive = !args.Contains("--no-recursive");
         bool writeLog = !args.Contains("--no-log");
 
         if (!Directory.Exists(directory))
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Directory does not exist: {directory}");
-            Console.ResetColor();
+            WriteError($"Directory does not exist: {directory}");
             return 1;
         }
 
         var library = new Mp3Library();
 
-        // --- Step 1: read every mp3 file's tags into a list of records -------
-        Console.WriteLine($"Scanning '{directory}' ({(recursive ? "recursive" : "top-level only")})...");
+        // --- Read every mp3 file's tags into a list of records ---------------
         var records = library.ReadTags(directory, recursive);
 
         if (records.Count == 0)
@@ -50,23 +60,16 @@ public static class Program
             return 0;
         }
 
-        Console.WriteLine($"Found {records.Count} mp3 file(s):");
+        // --- Repair unreadable files, then fill in missing albums ------------
+        // Repairs come first so that a repaired file can also get an album.
+        records = library.RepairUnreadableFiles(records, dryRun);
+        records = library.UpdateMissingAlbumTags(records, dryRun);
 
-        records.ForEach(x => Console.WriteLine(x.FileName));
-
-        // --- Repair files that couldn't be read ------------------------------
-        if (records.Any(r => r.Status == Mp3Status.Error))
-        {
-            Console.WriteLine();
-            Console.WriteLine(dryRun
-                ? "Checking unreadable files (no files will be modified). Pass --apply to repair them:"
-                : "Repairing unreadable files (--apply was specified)...");
-            records = library.RepairUnreadableFiles(records, dryRun);
-        }
-
-        Console.WriteLine();
         Console.WriteLine("Summary: " + string.Join(", ",
             records.GroupBy(r => r.Status).OrderBy(g => g.Key).Select(g => $"{g.Key} {g.Count()}")));
+
+        if (dryRun && records.Any(r => r.Changes.Count > 0))
+            Console.WriteLine("No files were modified. Pass --apply to write these changes.");
 
         // --- Write the CSV log -----------------------------------------------
         if (writeLog)
@@ -77,48 +80,30 @@ public static class Program
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"Failed to write log: {ex.Message}");
-                Console.ResetColor();
+                WriteError($"Failed to write log: {ex.Message}");
                 return 1;
             }
         }
 
-        //foreach (var record in records)
-        //    Console.WriteLine($"  {record}");
-
-        //var missingCount = records.Count(r => r.AlbumWasMissing);
-        //Console.WriteLine();
-        //Console.WriteLine($"{missingCount} file(s) are missing an Album tag.");
-
-        //if (missingCount == 0)
-        //{
-        //    Console.WriteLine("Nothing to update.");
-        //    return 0;
-        //}
-
-        //// --- Step 2: update Album tag from directory name where missing ------
-        //Console.WriteLine();
-        //Console.WriteLine(dryRun
-        //    ? "Performing dry run (no files will be modified). Pass --apply to write changes:"
-        //    : "Applying changes (--apply was specified)...");
-        //var updatedRecords = library.UpdateMissingAlbumTags(records, dryRun);
-
-        //Console.WriteLine();
-        //Console.WriteLine("Done. Final state:");
-        //foreach (var record in updatedRecords)
-        //    Console.WriteLine($"  {record}");
-
         return 0;
+    }
+
+    private static void WriteError(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine(message);
+        Console.ResetColor();
     }
 
     private static void PrintUsage()
     {
         Console.WriteLine("Reads mp3 tags from a directory, repairs tag faults that make files");
-        Console.WriteLine("unreadable, and logs every file's details and errors to a CSV file.");
+        Console.WriteLine("unreadable, and fills in missing Album tags from the folder name.");
+        Console.WriteLine("The console lists changes only. Every file's details, tags and errors");
+        Console.WriteLine("go in a CSV log.");
         Console.WriteLine();
         Console.WriteLine("By default this is a DRY RUN: no mp3 files are modified. Pass --apply");
-        Console.WriteLine("to actually repair files. Each original is kept as <name>.mp3.bak.");
+        Console.WriteLine("to write the changes.");
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]");
