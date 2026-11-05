@@ -32,9 +32,6 @@ public class Mp3Library
             }
             catch (Exception ex)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"  Failed to read '{filePath}': {ex.Message}");
-                Console.ResetColor();
                 records.Add(CreateFileRecord(filePath) with
                 {
                     Status = Mp3Status.Error,
@@ -60,10 +57,7 @@ public class Mp3Library
         {
             var repair = Id3v2Repair.TryRepair(File.ReadAllBytes(record.FilePath));
             if (repair is null)
-            {
-                WriteColored(ConsoleColor.Red, $"  No automatic repair for '{record.FilePath}'");
                 return record;
-            }
 
             // Throws if TagLib still can't read the repaired data.
             var verified = ReadFromMemory(record.FilePath, repair.Data);
@@ -78,7 +72,7 @@ public class Mp3Library
                 {
                     Status = Mp3Status.Repairable,
                     Errors = record.Errors,
-                    RepairActions = repair.Actions
+                    Changes = repair.Actions
                 };
             }
 
@@ -88,14 +82,98 @@ public class Mp3Library
             {
                 Status = Mp3Status.Repaired,
                 Errors = record.Errors,
-                RepairActions = repair.Actions
+                Changes = repair.Actions
             };
         }
         catch (Exception ex)
         {
-            WriteColored(ConsoleColor.Red, $"  Failed to repair '{record.FilePath}': {ex.Message}");
+            // A dry run changes nothing, so its failures belong only in the log.
+            if (!dryRun)
+                WriteColored(ConsoleColor.Red, $"  Failed to repair '{record.FilePath}': {ex.Message}");
+
             return record with { Errors = [.. record.Errors, $"Repair failed: {ex.Message}"] };
         }
+    }
+
+    /// <summary>
+    /// Sets a missing Album tag to the name of the folder containing the file.
+    /// Files that are unreadable or flagged with a warning are skipped, so that
+    /// tags are never rewritten on a file that may be damaged or not really an mp3.
+    /// </summary>
+    public List<Mp3TagRecord> UpdateMissingAlbumTags(List<Mp3TagRecord> records, bool dryRun = true) =>
+        records.Select(r => CanUpdateAlbum(r) ? UpdateAlbum(r, dryRun) : r).ToList();
+
+    private static bool CanUpdateAlbum(Mp3TagRecord record) =>
+        record.AlbumWasMissing &&
+        record.Status is Mp3Status.Ok or Mp3Status.Repairable or Mp3Status.Repaired;
+
+    private static Mp3TagRecord UpdateAlbum(Mp3TagRecord record, bool dryRun)
+    {
+        var album = record.ContainingDirectoryName;
+        IReadOnlyList<string> changes = [.. record.Changes, $"Set Album to \"{album}\""];
+
+        if (dryRun)
+        {
+            WriteColored(ConsoleColor.Yellow, $"  [DRY RUN] Would set Album to \"{album}\": {record.FileName}");
+            return record with
+            {
+                Status = record.Status == Mp3Status.Ok ? Mp3Status.Updatable : record.Status,
+                Changes = changes
+            };
+        }
+
+        try
+        {
+            WriteAlbumTag(record.FilePath, album);
+            WriteColored(ConsoleColor.Yellow, $"  Set Album to \"{album}\": {record.FileName}");
+
+            return ReadSingleFile(record.FilePath) with
+            {
+                Status = record.Status == Mp3Status.Repaired ? Mp3Status.Repaired : Mp3Status.Updated,
+                Errors = record.Errors,
+                Changes = changes
+            };
+        }
+        catch (Exception ex)
+        {
+            WriteColored(ConsoleColor.Red, $"  Failed to set Album on '{record.FilePath}': {ex.Message}");
+            return record with
+            {
+                Status = Mp3Status.Error,
+                Errors = [.. record.Errors, $"Album update failed: {ex.Message}"]
+            };
+        }
+    }
+
+    /// <summary>
+    /// Writes the tag to a temporary copy and then swaps it in, so a failed save
+    /// can't damage the original. The modified time is kept because the audio
+    /// hasn't changed.
+    /// </summary>
+    private static void WriteAlbumTag(string filePath, string album)
+    {
+        var modified = File.GetLastWriteTimeUtc(filePath);
+        var tempPath = filePath + ".tmp";
+
+        try
+        {
+            File.Copy(filePath, tempPath, overwrite: true);
+
+            // The .tmp extension means TagLib has to be told the file type.
+            using (var file = TagLib.File.Create(tempPath, "audio/mpeg", TagLib.ReadStyle.Average))
+            {
+                file.Tag.Album = album;
+                file.Save();
+            }
+
+            File.Replace(tempPath, filePath, null);
+        }
+        finally
+        {
+            File.Delete(tempPath);
+        }
+
+        File.SetLastWriteTimeUtc(filePath, modified);
     }
 
     /// <summary>
@@ -205,65 +283,6 @@ public class Mp3Library
         public Stream ReadStream => new MemoryStream(contents, writable: false);
         public Stream WriteStream => throw new NotSupportedException();
         public void CloseStream(Stream stream) => stream.Dispose();
-    }
-
-    /// <summary>
-    /// For every record whose Album tag is missing/empty, sets the Album tag
-    /// to the name of the directory that contains the file, saves the change
-    /// to disk, and returns an updated list of records reflecting the change.
-    /// </summary>
-    /// <param name="records">Previously-read records to evaluate and update.</param>
-    /// <param name="dryRun">If true, reports what would change without writing to disk.</param>
-    public List<Mp3TagRecord> UpdateMissingAlbumTags(List<Mp3TagRecord> records, bool dryRun = false)
-    {
-        var updated = new List<Mp3TagRecord>(records.Count);
-
-        foreach (var record in records)
-        {
-            if (!record.AlbumWasMissing)
-            {
-                updated.Add(record);
-                continue;
-            }
-
-            var newAlbumName = record.ContainingDirectoryName;
-
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine(dryRun
-                ? $"  [DRY RUN] Would set Album -> \"{newAlbumName}\" for {record.FileName}"
-                : $"  Updating Album -> \"{newAlbumName}\" for {record.FileName}");
-            Console.ResetColor();
-
-            if (!dryRun)
-            {
-                try
-                {
-                    WriteAlbumTag(record.FilePath, newAlbumName);
-                    updated.Add(record.WithAlbum(newAlbumName));
-                    continue;
-                }
-                catch (Exception ex)
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"  Failed to update '{record.FilePath}': {ex.Message}");
-                    Console.ResetColor();
-                }
-            }
-
-            updated.Add(record);
-        }
-
-        return updated;
-    }
-
-    /// <summary>
-    /// Opens the file, sets the Album tag, and saves it back to disk.
-    /// </summary>
-    private static void WriteAlbumTag(string filePath, string albumName)
-    {
-        using var file = TagLib.File.Create(filePath);
-        file.Tag.Album = albumName;
-        file.Save();
     }
 
     private static string? NullIfEmpty(string? value) =>

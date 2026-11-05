@@ -15,7 +15,7 @@ public static class Mp3CsvLog
     [
         ("Status", (r, _) => r.Status),
         ("Errors", (r, _) => string.Join(" | ", r.Errors)),
-        ("RepairActions", (r, _) => string.Join(" | ", r.RepairActions)),
+        ("Changes", (r, _) => string.Join(" | ", r.Changes)),
         ("RelativePath", (r, root) => Path.GetRelativePath(root, r.FilePath)),
         ("Directory", (r, _) => r.ContainingDirectoryName),
         ("FileName", (r, _) => r.FileName),
