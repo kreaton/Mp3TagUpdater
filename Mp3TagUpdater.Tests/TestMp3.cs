@@ -8,7 +8,7 @@ internal static class TestMp3
     private const int FrameSize = 417;
     private const int FrameCount = 100; // about 2.6 seconds
 
-    public static string Create(string path, string? album = null, string title = "Test Title", string? artist = "Test Artist")
+    public static string Create(string path, string? album = null, string? title = "Test Title", string? artist = "Test Artist")
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 

@@ -25,6 +25,14 @@ public static class Mp3Status
     public const string Updated = "Updated";
 }
 
+/// <summary>What a record describes: an mp3, or another file or folder found when fixing names.</summary>
+public enum Mp3EntryKind
+{
+    Mp3,
+    File,
+    Folder
+}
+
 /// <summary>New values for a file's tags and name. A null value is left as it is.</summary>
 public sealed record Mp3TagEdit
 {
@@ -32,6 +40,8 @@ public sealed record Mp3TagEdit
     public string? Artist { get; init; }
     public string? Album { get; init; }
     public string? AlbumArtist { get; init; }
+    public uint? Track { get; init; }
+    public uint? Disc { get; init; }
 
     /// <summary>The new file name, extension included.</summary>
     public string? FileName { get; init; }
@@ -45,8 +55,12 @@ public sealed record Mp3TagEdit
     /// <summary>A missing Album is filled in from the folder name.</summary>
     public bool FillsAlbum { get; init; }
 
+    /// <summary>Missing tags are filled in from the file name.</summary>
+    public bool FillsFromFileName { get; init; }
+
     /// <summary>True if any tag is to be written.</summary>
-    public bool ChangesTags => Title is not null || Artist is not null || Album is not null || AlbumArtist is not null;
+    public bool ChangesTags =>
+        Title is not null || Artist is not null || Album is not null || AlbumArtist is not null || Track is not null || Disc is not null;
 }
 
 /// <summary>
@@ -55,7 +69,13 @@ public sealed record Mp3TagEdit
 /// </summary>
 public record Mp3TagRecord
 {
-    /// <summary>Full path to the mp3 file on disk.</summary>
+    /// <summary>
+    /// An mp3, unless the FixNames option added the record for another file or
+    /// a folder whose name needs fixing. Such records have no tags.
+    /// </summary>
+    public Mp3EntryKind Kind { get; init; } = Mp3EntryKind.Mp3;
+
+    /// <summary>Full path to the mp3 file (or other file or folder) on disk.</summary>
     public required string FilePath { get; init; }
 
     /// <summary>File name only (e.g. "01 - Track.mp3").</summary>

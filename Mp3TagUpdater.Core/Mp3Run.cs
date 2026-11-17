@@ -30,6 +30,20 @@ public sealed record Mp3RunOptions(string Directory)
     /// </summary>
     public bool FixLetters { get; init; }
 
+    /// <summary>
+    /// Correct misencoded letters in the name of every file and folder below <see cref="Directory"/>,
+    /// not only the mp3 files: UTF-8 read as Windows-1252 ("Ã¸"), or as DOS code page 437 or 850
+    /// ("├©"). Missing albums get the corrected folder name. See <see cref="MojibakeText"/>.
+    /// </summary>
+    public bool FixNames { get; init; }
+
+    /// <summary>
+    /// Fill in a missing Title, Artist, Track and Disc from file names such as
+    /// "1-02 Artist - Title.mp3" or "02 Artist - Title.mp3". Tags that are set are left alone.
+    /// See <see cref="FileNameTags"/>.
+    /// </summary>
+    public bool FillFromFileName { get; init; }
+
     /// <summary>Move the artist out of titles such as "Artist / Title". See <see cref="ArtistTitleSplit"/>.</summary>
     public TitleSplitMode SplitTitles { get; init; } = TitleSplitMode.Off;
 }

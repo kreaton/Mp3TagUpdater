@@ -27,7 +27,7 @@ Used to build, test or render promotional material only; not part of the shipped
 
 | Asset(s) | Origin | Licence |
 |---|---|---|
-| `Mp3TagUpdater.Wpf/app.ico`, `images/banner.png` | Drawn in code (Python with Pillow) for this project with Claude Code, under the author's direction. The banner text is set in Segoe UI from the Windows fonts folder and is rendered into the image; no font file is distributed | MIT (as part of this project) |
+| `Mp3TagUpdater.Wpf/app.ico`, `images/banner.png` | The tile and music note are reused from the author's Mp3Player icon, which the author AI-generated with an image-generation tool. The green update badge, the layout and the banner were drawn in code (Python with Pillow) with Claude Code, under the author's direction. The banner text is set in Segoe UI from the Windows fonts folder and is rendered into the image; no font file is distributed | MIT (as part of this project) |
 
 The test suite writes its own mp3 files at run time; none are stored in the repository.
 

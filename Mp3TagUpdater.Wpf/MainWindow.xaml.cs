@@ -37,7 +37,10 @@ public partial class MainWindow : Window
         RecursiveBox.IsChecked = _settings.Recursive;
         LogBox.IsChecked = _settings.WriteLog;
         FixLettersBox.IsChecked = _settings.FixLetters;
+        FixNamesBox.IsChecked = _settings.FixNames;
+        FromNamesBox.IsChecked = _settings.FromNames;
         SplitBox.SelectedIndex = (int)_settings.SplitTitles;
+        HideOkBox.IsChecked = _settings.HideOk;
         UpdateButtons();
     }
 
@@ -48,7 +51,10 @@ public partial class MainWindow : Window
         _settings.Recursive = RecursiveBox.IsChecked == true;
         _settings.WriteLog = LogBox.IsChecked == true;
         _settings.FixLetters = FixLettersBox.IsChecked == true;
+        _settings.FixNames = FixNamesBox.IsChecked == true;
+        _settings.FromNames = FromNamesBox.IsChecked == true;
         _settings.SplitTitles = SplitMode;
+        _settings.HideOk = HideOkBox.IsChecked == true;
         _settings.Save();
     }
 
@@ -91,20 +97,24 @@ public partial class MainWindow : Window
             DryRun = dryRun,
             Recursive = RecursiveBox.IsChecked == true,
             FixLetters = FixLettersBox.IsChecked == true,
+            FixNames = FixNamesBox.IsChecked == true,
+            FillFromFileName = FromNamesBox.IsChecked == true,
             SplitTitles = SplitMode
         };
 
     private void UpdateButtons()
     {
         // Checked handlers fire while the XAML is still loading.
-        if (ScanButton is null || FolderBox is null || RecursiveBox is null || FixLettersBox is null || SplitBox is null)
+        if (ScanButton is null || FolderBox is null || RecursiveBox is null || FixLettersBox is null || FixNamesBox is null || FromNamesBox is null || SplitBox is null)
             return;
 
         var idle = _cancellation is null;
         ScanButton.IsEnabled = idle && !string.IsNullOrWhiteSpace(FolderBox.Text);
 
         // Apply only writes what the last scan showed, so the folder and options must still match it.
-        var pending = _rows.Count(r => r.HasChanges && r.Record.Status is Mp3Status.Repairable or Mp3Status.Updatable);
+        // Every change a scan found is still to be applied, including a rename of a damaged mp3,
+        // which keeps its Error or Warning status.
+        var pending = _rows.Count(r => r.HasChanges);
         var scanStillValid = _scanned is not null && _scanned == CurrentOptions(dryRun: true);
         ApplyButton.IsEnabled = idle && scanStillValid && pending > 0;
         ApplyButton.Content = scanStillValid && pending > 0 ? $"Apply {pending} {(pending == 1 ? "change" : "changes")}..." : "Apply changes...";
@@ -112,7 +122,7 @@ public partial class MainWindow : Window
         CancelButton.IsEnabled = !idle;
         // Installing an update restarts the app, so it must not be reachable during a run.
         AboutButton.IsEnabled = idle;
-        FolderBox.IsEnabled = RecursiveBox.IsEnabled = LogBox.IsEnabled = FixLettersBox.IsEnabled = SplitBox.IsEnabled = idle;
+        FolderBox.IsEnabled = RecursiveBox.IsEnabled = LogBox.IsEnabled = FixLettersBox.IsEnabled = FixNamesBox.IsEnabled = FromNamesBox.IsEnabled = SplitBox.IsEnabled = idle;
     }
 
     // --- Running -----------------------------------------------------------------
@@ -123,11 +133,16 @@ public partial class MainWindow : Window
     {
         var options = CurrentOptions(dryRun: false);
         var changed = _rows.Where(r => r.HasChanges).ToList();
-        var repairs = changed.Count(r => r.Record.Status == Mp3Status.Repairable);
-        var edits = changed.Select(r => r.Edit).OfType<Mp3TagEdit>().ToList();
+        var mp3s = changed.Where(r => r.Record.Kind == Mp3EntryKind.Mp3).ToList();
+        var otherFiles = changed.Count(r => r.Record.Kind == Mp3EntryKind.File);
+        var folders = changed.Count(r => r.Record.Kind == Mp3EntryKind.Folder);
+        var repairs = mp3s.Count(r => r.Record.Status == Mp3Status.Repairable);
+        // Record.Edit rather than the row's Edit, which leaves out a damaged mp3 that is only renamed.
+        var edits = mp3s.Select(r => r.Record.Edit).OfType<Mp3TagEdit>().ToList();
         var letters = edits.Count(e => e.FixesLetters);
         var splits = edits.Count(e => e.SplitsTitle);
         var albums = edits.Count(e => e.FillsAlbum);
+        var fromNames = edits.Count(e => e.FillsFromFileName);
         var renames = edits.Count(e => e.FileName is not null);
 
         var lines = new List<string>();
@@ -137,14 +152,26 @@ public partial class MainWindow : Window
             lines.Add($"•  {Files(letters)} given corrected letters (æ, ø, å and others).");
         if (splits > 0)
             lines.Add($"•  {Files(splits)} given the artist from the title. Check the Artist and Title columns first.");
+        if (fromNames > 0)
+            lines.Add($"•  {Files(fromNames)} given missing tags (title, artist, track, disc) from the file name.");
         if (albums > 0)
             lines.Add($"•  {Files(albums)} given an Album tag from the folder name.");
         if (renames > 0)
             lines.Add($"•  {Files(renames)} renamed.");
+        if (otherFiles > 0)
+            lines.Add($"•  {Count(otherFiles, "other file is", "other files are")} renamed, such as covers and playlists.");
+        if (folders > 0)
+            lines.Add($"•  {Count(folders, "folder is", "folders are")} renamed.");
+
+        var what = string.Join(" and ", new[]
+        {
+            mp3s.Count > 0 ? $"changes {Count(mp3s.Count, "mp3 file", "mp3 files")}" : null,
+            otherFiles + folders > 0 ? $"renames {Count(otherFiles + folders, "other file or folder", "other files and folders")}" : null
+        }.OfType<string>());
 
         var answer = MessageBox.Show(
             this,
-            $"This writes to {changed.Count} mp3 {(changed.Count == 1 ? "file" : "files")} in\n\n{options.Directory}\n\n{string.Join("\n", lines)}\n\n" +
+            $"This {what} in\n\n{options.Directory}\n\n{string.Join("\n", lines)}\n\n" +
             "Modified dates are kept. The folder is read again first, so the changes are worked out from the files as they are now.\n\nApply the changes?",
             "Apply changes",
             MessageBoxButton.YesNo,
@@ -155,6 +182,7 @@ public partial class MainWindow : Window
             await RunAsync(options);
 
         static string Files(int n) => n == 1 ? "1 file is" : $"{n} files are";
+        static string Count(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{n} {many}";
     }
 
     private async Task RunAsync(Mp3RunOptions options)
@@ -240,6 +268,7 @@ public partial class MainWindow : Window
 
         FilterAll.Content = $"All files ({_rows.Count})";
         FilterChanges.Content = $"Changes ({_rows.Count(r => r.HasChanges)})";
+        FilterUpdatable.Content = $"Updatable ({_rows.Count(r => r.Status == Mp3Status.Updatable)})";
         FilterProblems.Content = $"Errors and warnings ({_rows.Count(r => r.IsProblem)})";
         UpdateCount();
 
@@ -312,12 +341,13 @@ public partial class MainWindow : Window
     private bool Filter(object item)
     {
         var row = (FileRow)item;
-        var show = FilterBox.SelectedIndex switch
-        {
-            1 => row.HasChanges,
-            2 => row.IsProblem,
-            _ => true
-        };
+        var filter = FilterBox.SelectedItem;
+        var show = filter == FilterChanges ? row.HasChanges
+            : filter == FilterUpdatable ? row.Status == Mp3Status.Updatable
+            : filter == FilterProblems ? row.IsProblem
+            : true;
+        if (HideOkBox.IsChecked == true && row.Status == Mp3Status.Ok)
+            return false;
         var search = SearchBox.Text.Trim();
         return show && (search.Length == 0 || row.Matches(search));
     }

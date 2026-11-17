@@ -41,6 +41,8 @@ public static class Mp3CsvLog
         ("Channels", (r, _) => ZeroAsEmpty((uint)r.Channels)),
         ("TagTypes", (r, _) => r.TagTypes),
         ("PictureCount", (r, _) => r.PictureCount),
+        // Last, so logs from before it was added still line up: mp3, file or folder.
+        ("Kind", (r, _) => r.Kind.ToString().ToLowerInvariant()),
     ];
 
     /// <summary>

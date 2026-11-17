@@ -10,10 +10,10 @@
 
 **Fix the mp3 files your player can't read, and give every song an album.**
 
-Mp3TagUpdater checks a folder of `.mp3` files, repairs tag faults that make files unreadable, and fills in missing Album tags from the folder name. It can also correct Danish letters that show as two characters ("Ã¸" for "ø"), and move the artist out of titles such as "Artist / Title".
+Mp3TagUpdater checks a folder of `.mp3` files, repairs tag faults that make files unreadable, and fills in missing Album tags from the folder name. It can also correct Danish letters that show as two characters ("Ã¸" for "ø"), read missing titles, artists and track numbers from file names such as "1-02 Artist - Title.mp3", and move the artist out of titles such as "Artist / Title".
 
 - **Safe by default:** a scan only shows what would change. Nothing is written until you choose **Apply**.
-- **Every file at a glance:** status, album, artist, title, length, and what would change or went wrong.
+- **Every file at a glance:** status, album, track, artist, title, length, and what would change or went wrong.
 - **Full CSV log:** every file's details, tags and errors in a log that opens in a spreadsheet or loads into a database, including files that couldn't be read.
 
 ## Install
@@ -28,12 +28,12 @@ To get a newer version later, click the ⓘ button and choose **Check for update
 
 1. Choose a **Folder** of mp3 files with **Browse...**, or drop a folder on the window.
 2. Choose **Scan**. Every mp3 is read and listed, and nothing is changed. A changed album is shown as `→ Folder name`.
-3. Check the list. **Show** narrows it to the files with changes or to errors and warnings, and **Search** finds a file by path, title, artist or album.
+3. Check the list. **Show** narrows it to the files with changes, to only the `Updatable` files, or to errors and warnings. **Hide OK** leaves out the files with nothing to change and no problems, and **Search** finds a file by path, title, artist or album.
 4. Choose **Apply N changes...** and confirm. The folder is read again and the changes are written.
 
 **Cancel** stops after the current file. Double-click a file to show it in Explorer, or right-click to copy its path.
 
-Untick **Include subfolders** to check only the top-level folder. Untick **Write CSV log** to skip the log. **Open log** opens the log of the last run. Tick **Fix æ, ø, å** and choose **Split titles** to use the options described below. A new value is shown as `→ value` in the list until it is applied.
+Untick **Include subfolders** to check only the top-level folder. Untick **Write CSV log** to skip the log. **Open log** opens the log of the last run. Tick **Fix æ, ø, å**, **Fix all file and folder names** or **Tags from file names**, and choose **Split titles**, to use the options described below. A new value is shown as `→ value` in the list until it is applied.
 
 The folder and the options are remembered for the next start, in `%APPDATA%\Mp3TagUpdater\settings.json`.
 
@@ -69,6 +69,24 @@ Files with `Error` or `Warning` status are skipped, so tags are never rewritten 
 
 All tag changes are saved to a temporary copy that is then swapped in, so a failed save can't damage the original. The modified time is kept, but no `.bak` is made.
 
+## Tags from file names
+
+**Tags from file names** fills in an empty Title, Artist, Track and Disc from the file name. Tags that are already set are never changed. These names are understood:
+
+| File name | Disc | Track | Artist | Title |
+|---|---|---|---|---|
+| `1-02 Juan Maglio - Union Civica.mp3` | 1 | 2 | Juan Maglio | Union Civica |
+| `02 Kim Larsen - Papirsklip.mp3`, `02 - Kim Larsen - Papirsklip.mp3` | | 2 | Kim Larsen | Papirsklip |
+| `7. Papirsklip.mp3`, `12-Papirsklip.mp3` | | 7, 12 | | Papirsklip |
+| `Kim Larsen - Papirsklip.mp3` | | | Kim Larsen | Papirsklip |
+| `Papirsklip.mp3` | | | | Papirsklip |
+
+The name is split at the first ` - `, so the artist comes first and a title may contain ` - ` itself. A name with the title first is read the wrong way round, so check the Artist and Title columns before applying.
+
+A number followed only by a space, such as `50 Cent - In da Club`, counts as a track number only when most files in the folder start with a number. A leading zero (`05 `) or a `.` or `-` after the number always makes it a track number. A four-digit number such as `1999` is never a track number.
+
+With **Fix æ, ø, å** or **Fix all file and folder names** ticked, the letters in the file name are corrected before it is read.
+
 ## Correcting æ, ø and å
 
 Some rippers stored the letters as UTF-8 but marked them as Latin-1, so a player shows each one as two characters: `Ã¦` for æ, `Ã¸` for ø and `Ã¥` for å. **Fix æ, ø, å** corrects them in Title, Artist, Album, Album Artist and the file name. Other letters with the same fault are corrected too, such as ä, ö, é and ´.
@@ -76,6 +94,26 @@ Some rippers stored the letters as UTF-8 but marked them as Latin-1, so a player
 In the capital letters Æ, Ø and Å (and Ä, Ö) the second character is often lost or turned into a space, as in `Mine Ã jne`. The letter is then looked up in the file name, so `Mine Ã jne` becomes `Mine Øjne` when the file is called `Mine Øjne De Skal Se.mp3`. If neither the file name nor the tags tell which letter it was, the text is left as it is and the file gets a note in the `Errors` column.
 
 A file name is checked against the corrected tags. Where they spell a word differently, the tag wins, so `VÃœr vor gÃœst.mp3` is renamed to `Vær vor gæst.mp3` when that is the title. A file is never renamed over an existing file.
+
+## Fixing all file and folder names
+
+**Fix all file and folder names** goes further than the mp3 files: it renames every file and folder below the chosen folder whose name has garbled letters, such as covers, playlists and the album folders themselves. The chosen folder keeps its own name. It uses the same rules as the MojibakeFileFix command-line tool and recognises more kinds of damage than **Fix æ, ø, å**:
+
+| Damaged name | Fixed | Letters were read as |
+|---|---|---|
+| `SÃ¸ren Ã…rhus` | `Søren Århus` | Windows-1252 |
+| `Donâ€™t â€“ stop` | `Don’t – stop` | Windows-1252 |
+| `ÃƒÂ¸l` (garbled twice) | `øl` | Windows-1252 |
+| `├ª├╕├Ñ` | `æøå` | DOS 437 |
+| `S├©ren` | `Søren` | DOS 850, common in files unpacked from zip archives |
+
+Only characters that together form a real letter are changed, so correct names such as `Århus`, `São Paulo` or `CHÂTEAU` are left alone. A missing Album is filled in with the corrected folder name, so an mp3 in `SÃ¸ren` gets the album `Søren`.
+
+Some names are listed as `Warning` and not renamed:
+- **Uncertain:** the only sign is one pair of characters that could also be correct, as in `MaÅ‚y` (Polish "Mały").
+- **Lost letters:** a byte was lost, as in `Ã jne` for "Øjne", or a letter was replaced by `�`.
+
+A folder's contents are renamed before the folder, and nothing is renamed over an existing file or folder. Folder links (junctions and symbolic links) are renamed but not entered. Files and folders that are renamed appear in the list and the log as their own rows, with a folder's name ending in `\`.
 
 ## Splitting "Artist / Title"
 
@@ -100,11 +138,12 @@ A half in parentheses or ending in `?` or `!` counts as the song. If the clues a
 
 ## CSV log
 
-Every run writes `mp3-log-YYYYMMDD-HHMMSS.csv` to the top of the chosen folder, scans included. It has one row per mp3.
+Every run writes `mp3-log-YYYYMMDD-HHMMSS.csv` to the top of the chosen folder, scans included. It has one row per mp3, plus a row for each other file or folder that **Fix all file and folder names** renames or warns about.
 
 - **Format:** RFC 4180, comma-separated, UTF-8 with BOM.
 - **Values:** numbers are whole and dates are `yyyy-MM-dd HH:mm:ss`, so they don't depend on locale. A missing value is an empty cell.
-- **Columns:** `Status`, `Errors`, `Changes`, `RelativePath`, `Directory`, `FileName`, `FullPath`, `SizeBytes`, `Created`, `Modified`, `Title`, `Artist`, `AlbumArtist`, `Album`, `Genre`, `Composer`, `Comment`, `Year`, `Track`, `TrackCount`, `Disc`, `Duration`, `DurationMs`, `BitrateKbps`, `SampleRateHz`, `Channels`, `TagTypes`, `PictureCount`.
+- **Columns:** `Status`, `Errors`, `Changes`, `RelativePath`, `Directory`, `FileName`, `FullPath`, `SizeBytes`, `Created`, `Modified`, `Title`, `Artist`, `AlbumArtist`, `Album`, `Genre`, `Composer`, `Comment`, `Year`, `Track`, `TrackCount`, `Disc`, `Duration`, `DurationMs`, `BitrateKbps`, `SampleRateHz`, `Channels`, `TagTypes`, `PictureCount`, `Kind`.
+- **Kind:** `mp3`, `file` or `folder`. It is the last column, so a log from before it was added still lines up.
 
 The `Changes` column records which files were changed, or would be by a scan.
 
@@ -127,7 +166,10 @@ Mp3TagUpdater.Core/
 ├── Mp3TagRecord.cs    # immutable record of one file's details, tags and status
 ├── Mp3Library.cs      # scanning, reading, repairing and updating
 ├── MisencodedText.cs  # corrects UTF-8 letters read as Windows-1252 ("Ã¸" → "ø")
+├── MojibakeText.cs    # corrects names read as Windows-1252, DOS 437 or 850, for all files and folders
+├── CodePageMap.cs     # maps a code page's characters back to their bytes
 ├── ArtistTitleSplit.cs # splits "Artist / Title" and works out the order per folder
+├── FileNameTags.cs    # reads disc, track, artist and title from file names
 ├── Id3v2Repair.cs     # byte-level repair of damaged ID3v2 tags
 └── Mp3CsvLog.cs       # CSV log writer
 ```
@@ -154,7 +196,7 @@ dotnet run --project Mp3TagUpdater.Cli -- "C:\Music\Party"
 
 ```
 Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
-              [--fix-letters] [--split-titles[=auto|artist-first|title-first]]
+              [--fix-letters] [--fix-names] [--from-names] [--split-titles[=auto|artist-first|title-first]]
 ```
 
 | Option | Effect |
@@ -163,6 +205,8 @@ Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
 | `--no-recursive` | Scan only the top-level directory, not subfolders. |
 | `--no-log` | Don't write the CSV log. |
 | `--fix-letters` | Correct misencoded letters such as `Ã¸` in tags and file names. |
+| `--fix-names` | Correct misencoded letters in the names of all files and folders, not only mp3 files. |
+| `--from-names` | Fill in a missing Title, Artist, Track and Disc from file names such as `1-02 Artist - Title.mp3`. |
 | `--split-titles` | Split "Artist / Title" titles, with the order worked out per folder. Add `=artist-first` or `=title-first` to fix the order. |
 | `-h`, `--help` | Show help. |
 

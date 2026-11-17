@@ -22,7 +22,9 @@ public sealed class FileRow(Mp3TagRecord record, string rootDirectory)
         _ => "Neutral"
     };
 
-    public string RelativePath { get; } = Path.GetRelativePath(rootDirectory, record.FilePath);
+    /// <summary>The path below the scanned folder. A folder ends in a backslash, so it reads as one.</summary>
+    public string RelativePath { get; } = Path.GetRelativePath(rootDirectory, record.FilePath)
+        + (record.Kind == Mp3EntryKind.Folder ? Path.DirectorySeparatorChar.ToString() : "");
 
     public bool HasChanges => Record.Changes.Count > 0;
 
@@ -34,6 +36,22 @@ public sealed class FileRow(Mp3TagRecord record, string rootDirectory)
     public string? Artist => Edit?.Artist is { } artist ? $"→ {artist}" : Record.Artist;
 
     public string? Title => Edit?.Title is { } title ? $"→ {title}" : Record.Title;
+
+    /// <summary>The disc and track, such as "1-02", or just the track. A new value starts with an arrow.</summary>
+    public string Number
+    {
+        get
+        {
+            var (disc, track) = NewDiscAndTrack;
+            var text = track == 0 ? "" : disc > 0 ? $"{disc}-{track:00}" : track.ToString();
+            return Edit is { Track: not null } or { Disc: not null } && text.Length > 0 ? $"→ {text}" : text;
+        }
+    }
+
+    /// <summary>Sorts by disc, then track.</summary>
+    public uint NumberOrder => NewDiscAndTrack is var (disc, track) ? disc * 10000 + track : 0;
+
+    private (uint Disc, uint Track) NewDiscAndTrack => (Edit?.Disc ?? Record.Disc, Edit?.Track ?? Record.Track);
 
     public TimeSpan Duration => Record.Duration;
 

@@ -23,6 +23,11 @@ public sealed class AppSettings
     public bool Recursive { get; set; } = true;
     public bool WriteLog { get; set; } = true;
     public bool FixLetters { get; set; }
+    public bool FixNames { get; set; }
+    public bool FromNames { get; set; }
+
+    /// <summary>Leave the files with OK status out of the list.</summary>
+    public bool HideOk { get; set; }
     public TitleSplitMode SplitTitles { get; set; } = TitleSplitMode.Off;
 
     /// <summary>The saved settings, or the defaults if there are none or they can't be read.</summary>

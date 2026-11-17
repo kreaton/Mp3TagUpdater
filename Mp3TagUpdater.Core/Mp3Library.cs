@@ -26,6 +26,8 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
         var records = ReadTags(options.Directory, options.Recursive, progress, cancellation);
         records = RepairUnreadableFiles(records, options.DryRun, progress, cancellation);
         records = UpdateTags(records, options, progress, cancellation);
+        if (options.FixNames)
+            records = FixNames(records, options, progress, cancellation);
         return new Mp3RunResult(records, cancellation.IsCancellationRequested);
     }
 
@@ -173,6 +175,8 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
     /// and Album Artist are corrected, using the file name to recover lost letters.</item>
     /// <item>With <see cref="Mp3RunOptions.SplitTitles"/>, a title such as "Artist / Title" is split
     /// into Artist and Title. The order is decided per folder unless the mode fixes it.</item>
+    /// <item>With <see cref="Mp3RunOptions.FillFromFileName"/>, a missing Title, Artist, Track and Disc
+    /// are read from the file name. See <see cref="FileNameTags"/>.</item>
     /// <item>A missing Album is set to the folder name.</item>
     /// <item>With <see cref="Mp3RunOptions.FixLetters"/>, misencoded letters in the file name are
     /// corrected, trusting the corrected tags where they spell a word differently.</item>
@@ -213,6 +217,14 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
                 (Path.GetDirectoryName(r.FilePath) ?? "", texts[r.FilePath].Artist, texts[r.FilePath].Title)))
             : [];
 
+        // Step 3 needs to know which folders number their files, so "50 Cent - ..." isn't track 50.
+        var numberedFolders = editable
+            .GroupBy(r => Path.GetDirectoryName(r.FilePath) ?? "", StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Count(r => FileNameTags.StartsWithNumber(Path.GetFileNameWithoutExtension(r.FileName))) * 2 > g.Count(),
+                StringComparer.OrdinalIgnoreCase);
+
         var plans = new Dictionary<string, (Mp3TagEdit, IReadOnlyList<string>, IReadOnlyList<string>)>(StringComparer.OrdinalIgnoreCase);
         foreach (var record in editable)
         {
@@ -232,10 +244,26 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
                 split = true;
             }
 
+            // Step 3: what the file name says, for the tags that are still empty.
+            uint? track = null, disc = null;
+            var fromName = false;
+            if (options.FillFromFileName && FileNameTags.Parse(ReadableStem(record.FileName, options),
+                    numberedFolders.GetValueOrDefault(Path.GetDirectoryName(record.FilePath) ?? "")) is { } info)
+            {
+                if (string.IsNullOrWhiteSpace(title) && info.Title is not null)
+                    (title, fromName) = (info.Title, true);
+                if (string.IsNullOrWhiteSpace(artist) && info.Artist is not null)
+                    (artist, fromName) = (info.Artist, true);
+                if (record.Track == 0 && info.Track > 0)
+                    (track, fromName) = (info.Track, true);
+                if (record.Disc == 0 && info.Disc > 0)
+                    (disc, fromName) = (info.Disc, true);
+            }
+
             var album = text.Album;
             var fillsAlbum = record.AlbumWasMissing;
             if (fillsAlbum)
-                album = record.ContainingDirectoryName;
+                album = options.FixNames ? FixedName(record.ContainingDirectoryName) : record.ContainingDirectoryName;
 
             // Step 4: the file name, checked against the corrected title and artist.
             string? fileName = null;
@@ -253,10 +281,13 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
                 Artist = Changed(record.Artist, artist),
                 Album = Changed(record.Album, album),
                 AlbumArtist = Changed(record.AlbumArtist, text.AlbumArtist),
+                Track = track,
+                Disc = disc,
                 FileName = fileName,
                 FixesLetters = text.Fixed || fileName is not null,
                 SplitsTitle = split,
-                FillsAlbum = fillsAlbum
+                FillsAlbum = fillsAlbum,
+                FillsFromFileName = fromName
             };
 
             if (!edit.ChangesTags && edit.FileName is null)
@@ -268,13 +299,17 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
 
             var changes = new List<string>();
             if (edit.Title is not null)
-                changes.Add($"Title \"{record.Title}\" → \"{edit.Title}\"");
+                changes.Add(record.Title is null ? $"Set Title to \"{edit.Title}\"" : $"Title \"{record.Title}\" → \"{edit.Title}\"");
             if (edit.Artist is not null)
                 changes.Add(record.Artist is null ? $"Set Artist to \"{edit.Artist}\"" : $"Artist \"{record.Artist}\" → \"{edit.Artist}\"");
             if (edit.Album is not null)
                 changes.Add(fillsAlbum ? $"Set Album to \"{edit.Album}\"" : $"Album \"{record.Album}\" → \"{edit.Album}\"");
             if (edit.AlbumArtist is not null)
                 changes.Add($"Album Artist \"{record.AlbumArtist}\" → \"{edit.AlbumArtist}\"");
+            if (edit.Disc is not null)
+                changes.Add($"Set Disc to {edit.Disc}");
+            if (edit.Track is not null)
+                changes.Add($"Set Track to {edit.Track}");
             if (edit.FileName is not null)
                 changes.Add($"Rename to \"{edit.FileName}\"");
 
@@ -285,6 +320,17 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
 
         static string? Changed(string? before, string? after) =>
             after is not null && !string.Equals(before, after, StringComparison.Ordinal) ? after : null;
+    }
+
+    /// <summary>The file name without its extension, with misencoded letters corrected as the options ask.</summary>
+    private static string ReadableStem(string fileName, Mp3RunOptions options)
+    {
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        if (options.FixNames)
+            stem = FixedName(stem);
+        if (options.FixLetters && MisencodedText.Fix(stem, []) is { Unresolved: 0 } fix)
+            stem = fix.Text;
+        return stem;
     }
 
     private Mp3TagRecord ApplyEdit(Mp3TagRecord record,
@@ -339,6 +385,208 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
         }
     }
 
+    /// <summary>The name with its misencoded letters corrected, when the correction is certain.</summary>
+    private static string FixedName(string name) =>
+        MojibakeText.TryRepair(name) is { Certain: true } repair ? repair.Fixed : name;
+
+    /// <summary>
+    /// Corrects misencoded letters in the name of every file and folder below the directory
+    /// (the directory itself keeps its name), like MojibakeFileFix. An mp3 gets the rename added
+    /// to its record, unless the tag step already renames it. Other files and folders get a
+    /// record of their own when their name needs attention. A folder's contents are renamed
+    /// before the folder, and the paths of the records below it follow the rename.
+    /// </summary>
+    /// <remarks>
+    /// A name whose only evidence is a single sequence that could be ordinary text ("MaÅ‚y") is
+    /// uncertain, and is listed with a warning but not renamed. So is damage that lost a byte,
+    /// such as "Ã jne". A name is never renamed onto an existing file or folder.
+    /// </remarks>
+    public List<Mp3TagRecord> FixNames(List<Mp3TagRecord> records, Mp3RunOptions options,
+        IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default)
+    {
+        var result = records.ToList();
+        if (cancellation.IsCancellationRequested)
+            return result;
+
+        progress?.Report(new Mp3Progress("Checking names", 0, 0));
+        var findings = new List<(string Path, bool IsDirectory, MojibakeRepair? Repair, IReadOnlyList<string> Warnings)>();
+        CollectNames(new DirectoryInfo(Path.GetFullPath(options.Directory)), options.Recursive, findings, cancellation);
+
+        var done = 0;
+        foreach (var (path, isDirectory, repair, warnings) in findings)
+        {
+            if (cancellation.IsCancellationRequested)
+                break;
+
+            var index = isDirectory ? -1 : result.FindIndex(r => r.Kind == Mp3EntryKind.Mp3 && SamePath(r.FilePath, path));
+            var record = index >= 0 ? result[index] : CreateEntryRecord(path, isDirectory);
+
+            // The tag step already renames this mp3, with the corrected tags to go by.
+            if (options.DryRun && record.Edit?.FileName is not null)
+                continue;
+
+            var updated = FixName(record, repair, warnings, options.DryRun, result);
+            if (index >= 0)
+                result[index] = updated;
+            else
+                result.Add(updated);
+
+            progress?.Report(new Mp3Progress("Fixing names", ++done, findings.Count));
+        }
+
+        return result;
+
+        static bool SamePath(string a, string b) =>
+            string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Mp3TagRecord FixName(Mp3TagRecord record, MojibakeRepair? repair, IReadOnlyList<string> damage,
+        bool dryRun, List<Mp3TagRecord> all)
+    {
+        var isMp3 = record.Kind == Mp3EntryKind.Mp3;
+        var what = record.Kind == Mp3EntryKind.Folder ? "folder" : "file";
+        var warnings = damage.Select(d => $"Name: {d}").ToList();
+
+        if (repair is { Certain: false })
+        {
+            warnings.Add($"Name may be misencoded: \"{repair.Original}\" would become \"{repair.Fixed}\", " +
+                "but it could also be correct as it is. Not renamed.");
+            repair = null;
+        }
+
+        // An mp3 keeps its own status; another file or folder is only listed because of its name.
+        var warningStatus = isMp3 ? record.Status : Mp3Status.Warning;
+        IReadOnlyList<string> errors = [.. record.Errors, .. warnings];
+
+        if (repair is null)
+            return record with { Status = warnings.Count > 0 ? warningStatus : record.Status, Errors = errors };
+
+        var change = $"Rename {(isMp3 ? "" : what + " ")}to \"{repair.Fixed}\"";
+        IReadOnlyList<string> changes = [.. record.Changes, change];
+        var edit = (record.Edit ?? new Mp3TagEdit()) with { FileName = repair.Fixed, FixesLetters = true };
+
+        if (dryRun)
+        {
+            Report(Mp3MessageKind.Change, $"[DRY RUN] Would rename {what} {record.FileName} to \"{repair.Fixed}\"");
+            return record with
+            {
+                // Renaming doesn't touch the contents, so even a damaged mp3 can be renamed; it keeps its status.
+                Status = !isMp3 || record.Status == Mp3Status.Ok ? Mp3Status.Updatable : record.Status,
+                Errors = errors,
+                Changes = changes,
+                Edit = edit
+            };
+        }
+
+        var oldPath = record.FilePath;
+        var newPath = Path.Combine(Path.GetDirectoryName(oldPath)!, repair.Fixed);
+        try
+        {
+            // Windows names are case-insensitive, so "É.txt" also collides with an existing "é.txt".
+            if (File.Exists(newPath) || Directory.Exists(newPath))
+                throw new IOException($"\"{repair.Fixed}\" already exists.");
+
+            if (record.Kind == Mp3EntryKind.Folder)
+                Directory.Move(oldPath, newPath);
+            else
+                File.Move(oldPath, newPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Report(Mp3MessageKind.Error, $"Failed to rename '{oldPath}': {ex.Message}");
+            return record with { Status = Mp3Status.Error, Errors = [.. errors, $"Rename failed: {ex.Message}"] };
+        }
+
+        Report(Mp3MessageKind.Change, $"Renamed {what} {record.FileName} to \"{repair.Fixed}\"");
+        if (record.Kind == Mp3EntryKind.Folder)
+            MoveRecordsBelow(all, oldPath, newPath);
+
+        return record with
+        {
+            FilePath = newPath,
+            FileName = repair.Fixed,
+            Status = !isMp3 || record.Status is Mp3Status.Ok or Mp3Status.Updated ? Mp3Status.Updated : record.Status,
+            Errors = errors,
+            Changes = changes,
+            Edit = edit
+        };
+    }
+
+    /// <summary>Points the records inside a renamed folder at their new paths.</summary>
+    private static void MoveRecordsBelow(List<Mp3TagRecord> records, string oldFolder, string newFolder)
+    {
+        var prefix = Path.TrimEndingDirectorySeparator(oldFolder) + Path.DirectorySeparatorChar;
+        var newName = Path.GetFileName(newFolder);
+        for (var i = 0; i < records.Count; i++)
+        {
+            var path = records[i].FilePath;
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var moved = Path.Combine(newFolder, path[prefix.Length..]);
+            var directlyInside = string.Equals(Path.GetDirectoryName(moved), newFolder, StringComparison.OrdinalIgnoreCase);
+            records[i] = records[i] with
+            {
+                FilePath = moved,
+                ContainingDirectoryName = directlyInside ? newName : records[i].ContainingDirectoryName
+            };
+        }
+    }
+
+    /// <summary>
+    /// Adds every name below <paramref name="directory"/> that needs attention, a folder's contents
+    /// before the folder, so they can be renamed in this order. Hidden and system entries are
+    /// included. Folder links (junctions, symbolic links) are checked but not entered.
+    /// </summary>
+    private static void CollectNames(DirectoryInfo directory, bool recursive,
+        List<(string, bool, MojibakeRepair?, IReadOnlyList<string>)> findings, CancellationToken cancellation)
+    {
+        List<FileSystemInfo> entries;
+        try
+        {
+            entries = directory
+                .EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = true })
+                .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (cancellation.IsCancellationRequested)
+                return;
+
+            var isDirectory = entry is DirectoryInfo;
+            if (isDirectory && recursive && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                CollectNames((DirectoryInfo)entry, recursive, findings, cancellation);
+
+            var repair = MojibakeText.TryRepair(entry.Name);
+            var warnings = MojibakeText.FindUnrecoverable(repair?.Fixed ?? entry.Name);
+            if (repair is not null || warnings.Count > 0)
+                findings.Add((entry.FullName, isDirectory, repair, warnings));
+        }
+    }
+
+    /// <summary>A record for a file or folder that isn't an mp3, holding only what the file system knows.</summary>
+    private static Mp3TagRecord CreateEntryRecord(string path, bool isDirectory)
+    {
+        FileSystemInfo info = isDirectory ? new DirectoryInfo(path) : new FileInfo(path);
+        return new Mp3TagRecord
+        {
+            Kind = isDirectory ? Mp3EntryKind.Folder : Path.GetExtension(path).Equals(".mp3", StringComparison.OrdinalIgnoreCase)
+                ? Mp3EntryKind.Mp3 : Mp3EntryKind.File,
+            FilePath = info.FullName,
+            FileName = info.Name,
+            ContainingDirectoryName = Path.GetFileName(Path.GetDirectoryName(info.FullName)) ?? "",
+            SizeBytes = info is FileInfo file ? file.Length : 0,
+            Created = info.CreationTime,
+            Modified = info.LastWriteTime
+        };
+    }
+
     /// <summary>Renames the file within its folder, and returns the new path. An existing file is never replaced.</summary>
     private static string Rename(string filePath, string fileName)
     {
@@ -376,6 +624,10 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
                     file.Tag.Album = edit.Album;
                 if (edit.AlbumArtist is not null)
                     file.Tag.AlbumArtists = [edit.AlbumArtist];
+                if (edit.Track is { } track)
+                    file.Tag.Track = track;
+                if (edit.Disc is { } disc)
+                    file.Tag.Disc = disc;
                 file.Save();
             }
 

@@ -36,6 +36,12 @@
             <CheckBox x:Name="FixLettersBox" Content="Fix æ, ø, å" Margin="24,0,0,0" VerticalAlignment="Center"
                       Checked="OnOptionChanged" Unchecked="OnOptionChanged"
                       ToolTip="Corrects letters shown as two characters, such as &quot;Ã¸&quot; for &quot;ø&quot;, in the tags and file names. Other letters such as ä, ö and é are corrected too." />
+            <CheckBox x:Name="FixNamesBox" Content="Fix all file and folder names" Margin="24,0,0,0" VerticalAlignment="Center"
+                      Checked="OnOptionChanged" Unchecked="OnOptionChanged"
+                      ToolTip="Also renames every other file and folder whose name has garbled letters, such as &quot;SÃ¸ren&quot; or &quot;S├©ren&quot; for &quot;Søren&quot;: covers, playlists, folders. Missing albums get the corrected folder name. Names that could be correct as they are, or that lost a letter, are only listed." />
+            <CheckBox x:Name="FromNamesBox" Content="Tags from file names" Margin="24,0,0,0" VerticalAlignment="Center"
+                      Checked="OnOptionChanged" Unchecked="OnOptionChanged"
+                      ToolTip="Fills in a missing Title, Artist, Track and Disc from file names such as &quot;1-02 Artist - Title.mp3&quot;, &quot;02 Artist - Title.mp3&quot; or &quot;Artist - Title.mp3&quot;. Tags that are already set are left alone." />
             <Label Content="Split _titles" Target="{Binding ElementName=SplitBox}" VerticalAlignment="Center" Margin="24,0,8,0" />
             <ComboBox x:Name="SplitBox" SelectedIndex="0" VerticalAlignment="Center" MinWidth="200" SelectionChanged="OnSplitChanged"
                       ToolTip="Moves the artist out of titles such as &quot;Artist / Title&quot; into the Artist tag. Automatic works out the order for each folder; check the result before applying.">
@@ -72,8 +78,12 @@
             <ComboBox x:Name="FilterBox" MinWidth="240" SelectedIndex="0" VerticalAlignment="Center" SelectionChanged="OnFilterChanged">
                 <ComboBoxItem x:Name="FilterAll" Content="All files" />
                 <ComboBoxItem x:Name="FilterChanges" Content="Changes" />
+                <ComboBoxItem x:Name="FilterUpdatable" Content="Updatable" />
                 <ComboBoxItem x:Name="FilterProblems" Content="Errors and warnings" />
             </ComboBox>
+            <CheckBox x:Name="HideOkBox" Content="Hide OK" Margin="16,0,0,0" VerticalAlignment="Center"
+                      Checked="OnFilterChanged" Unchecked="OnFilterChanged"
+                      ToolTip="Leaves out the files with OK status, which have nothing to change and no problems." />
             <TextBox x:Name="SearchBox" DockPanel.Dock="Right" Width="260" VerticalAlignment="Center" TextChanged="OnFilterChanged"
                      ToolTip="Show only files whose path, title, artist or album contains this text"
                      AutomationProperties.Name="Search" />
@@ -132,6 +142,7 @@
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="File" Binding="{Binding RelativePath}" Width="2*" ElementStyle="{StaticResource CellText}" />
                 <DataGridTextColumn Header="Album" Binding="{Binding Album}" Width="*" ElementStyle="{StaticResource CellText}" />
+                <DataGridTextColumn Header="#" Binding="{Binding Number}" SortMemberPath="NumberOrder" Width="Auto" ElementStyle="{StaticResource CellText}" />
                 <DataGridTextColumn Header="Artist" Binding="{Binding Artist}" Width="*" ElementStyle="{StaticResource CellText}" />
                 <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*" ElementStyle="{StaticResource CellText}" />
                 <DataGridTextColumn Header="Length" Binding="{Binding Length}" SortMemberPath="Duration" Width="Auto" ElementStyle="{StaticResource CellText}" />

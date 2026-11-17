@@ -223,6 +223,133 @@ public sealed class Mp3LibraryTests : IDisposable
         Assert.All(records.Where(r => r.ContainingDirectoryName == "B"), r => Assert.Equal("Duran Duran", r.Edit?.Artist));
     }
 
+    [Fact]
+    public void Other_names_are_only_checked_when_asked()
+    {
+        TestMp3.Create(Path.Combine(_root, "SÃ¸ren", "song.mp3"), album: "A");
+        File.WriteAllText(Path.Combine(_root, "SÃ¸ren", "cover Ã¦.jpg"), "x");
+
+        var records = new Mp3Library().Run(new Mp3RunOptions(_root)).Records;
+
+        var record = Assert.Single(records);
+        Assert.Equal(Mp3Status.Ok, record.Status);
+    }
+
+    [Fact]
+    public void Dry_run_lists_file_and_folder_renames_and_album_gets_the_fixed_name()
+    {
+        var mp3 = TestMp3.Create(Path.Combine(_root, "SÃ¸ren", "S├©ren.mp3"));
+        File.WriteAllText(Path.Combine(_root, "SÃ¸ren", "cover Ã¦.jpg"), "x");
+
+        var records = new Mp3Library().Run(new Mp3RunOptions(_root) { FixNames = true }).Records;
+
+        var song = Assert.Single(records, r => r.Kind == Mp3EntryKind.Mp3);
+        Assert.Equal(Mp3Status.Updatable, song.Status);
+        Assert.Equal("Søren", song.Edit?.Album);
+        Assert.Equal("Søren.mp3", song.Edit?.FileName);
+
+        var cover = Assert.Single(records, r => r.Kind == Mp3EntryKind.File);
+        Assert.Equal(Mp3Status.Updatable, cover.Status);
+        Assert.Equal(["Rename file to \"cover æ.jpg\""], cover.Changes);
+
+        var folder = Assert.Single(records, r => r.Kind == Mp3EntryKind.Folder);
+        Assert.Equal(["Rename folder to \"Søren\""], folder.Changes);
+
+        Assert.True(File.Exists(mp3));
+        Assert.False(Directory.Exists(Path.Combine(_root, "Søren")));
+    }
+
+    [Fact]
+    public void Apply_renames_contents_then_folders_and_records_follow()
+    {
+        TestMp3.Create(Path.Combine(_root, "Ã…rhus", "SÃ¸ren", "S├©ren.mp3"));
+        File.WriteAllText(Path.Combine(_root, "Ã…rhus", "SÃ¸ren", "cover Ã¦.jpg"), "x");
+
+        var result = new Mp3Library().Run(new Mp3RunOptions(_root) { DryRun = false, FixNames = true });
+
+        var song = Assert.Single(result.Records, r => r.Kind == Mp3EntryKind.Mp3);
+        var expected = Path.Combine(_root, "Århus", "Søren", "Søren.mp3");
+        Assert.Equal(expected, song.FilePath);
+        Assert.Equal("Søren", song.ContainingDirectoryName);
+        Assert.Equal(Mp3Status.Updated, song.Status);
+        Assert.True(File.Exists(expected));
+        Assert.True(File.Exists(Path.Combine(_root, "Århus", "Søren", "cover æ.jpg")));
+        Assert.Equal(2, result.Records.Count(r => r.Kind == Mp3EntryKind.Folder && r.Status == Mp3Status.Updated));
+
+        using var file = TagLib.File.Create(expected);
+        Assert.Equal("Søren", file.Tag.Album);
+    }
+
+    [Fact]
+    public void Uncertain_and_damaged_names_are_listed_but_not_renamed()
+    {
+        File.WriteAllText(Path.Combine(_root, "MaÅ‚y.txt"), "x");
+        File.WriteAllText(Path.Combine(_root, "Ã jne.txt"), "x");
+
+        var records = new Mp3Library().Run(new Mp3RunOptions(_root) { DryRun = false, FixNames = true }).Records;
+
+        Assert.Equal(2, records.Count);
+        Assert.All(records, r => Assert.Equal(Mp3Status.Warning, r.Status));
+        Assert.All(records, r => Assert.Empty(r.Changes));
+        Assert.True(File.Exists(Path.Combine(_root, "MaÅ‚y.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "Ã jne.txt")));
+    }
+
+    [Fact]
+    public void Fixed_name_never_replaces_an_existing_file()
+    {
+        File.WriteAllText(Path.Combine(_root, "Ã¦.txt"), "old");
+        File.WriteAllText(Path.Combine(_root, "æ.txt"), "keep");
+
+        var record = Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root) { DryRun = false, FixNames = true }).Records);
+
+        Assert.Equal(Mp3Status.Error, record.Status);
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(_root, "æ.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "Ã¦.txt")));
+    }
+
+    [Fact]
+    public void Missing_tags_are_filled_from_the_file_name()
+    {
+        var path = TestMp3.Create(Path.Combine(_root, "100 Tangos", "1-02 Juan Maglio - Union Civica.mp3"), title: null, artist: null);
+        TestMp3.Create(Path.Combine(_root, "100 Tangos", "1-03 Quinteto Victor - La cara de la luna.mp3"), title: "Kept", artist: null);
+
+        var dryRun = new Mp3Library().Run(new Mp3RunOptions(_root) { FillFromFileName = true }).Records;
+        var first = dryRun.Single(r => r.FilePath == path);
+        Assert.Equal(Mp3Status.Updatable, first.Status);
+        Assert.True(first.Edit is { Title: "Union Civica", Artist: "Juan Maglio", Track: 2u, Disc: 1u, FillsFromFileName: true });
+        Assert.Contains("Set Track to 2", first.Changes);
+
+        var applied = new Mp3Library().Run(new Mp3RunOptions(_root) { DryRun = false, FillFromFileName = true }).Records;
+        Assert.All(applied, r => Assert.Equal(Mp3Status.Updated, r.Status));
+
+        using (var file = TagLib.File.Create(path))
+        {
+            Assert.Equal("Union Civica", file.Tag.Title);
+            Assert.Equal("Juan Maglio", file.Tag.JoinedPerformers);
+            Assert.Equal(2u, file.Tag.Track);
+            Assert.Equal(1u, file.Tag.Disc);
+            Assert.Equal("100 Tangos", file.Tag.Album);
+        }
+
+        // A title that is set is left alone; only the empty tags are filled.
+        using var second = TagLib.File.Create(Path.Combine(_root, "100 Tangos", "1-03 Quinteto Victor - La cara de la luna.mp3"));
+        Assert.Equal("Kept", second.Tag.Title);
+        Assert.Equal("Quinteto Victor", second.Tag.JoinedPerformers);
+        Assert.Equal(3u, second.Tag.Track);
+    }
+
+    [Fact]
+    public void File_names_are_ignored_without_the_option()
+    {
+        TestMp3.Create(Path.Combine(_root, "Party", "02 Kim Larsen - Papirsklip.mp3"), album: "Party", title: null, artist: null);
+
+        var record = Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root)).Records);
+
+        Assert.Equal(Mp3Status.Ok, record.Status);
+        Assert.Null(record.Edit);
+    }
+
     private sealed class ListProgress(List<Mp3Progress> reports) : IProgress<Mp3Progress>
     {
         public void Report(Mp3Progress value) => reports.Add(value);
