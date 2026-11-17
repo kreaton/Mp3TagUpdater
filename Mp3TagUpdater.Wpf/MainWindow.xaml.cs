@@ -75,14 +75,14 @@ public partial class MainWindow : Window
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = _cancellation is null && DroppedFolder(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = _cancellation is null && !_draggingOut && DroppedFolder(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
     private void OnDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
-        if (_cancellation is null && DroppedFolder(e) is { } folder)
+        if (_cancellation is null && !_draggingOut && DroppedFolder(e) is { } folder)
             FolderBox.Text = folder;
     }
 
@@ -369,11 +369,107 @@ public partial class MainWindow : Window
 
     private IEnumerable<FileRow> SelectedRows => FileGrid.SelectedItems.OfType<FileRow>();
 
+    /// <summary>Opens the file in its default program, as Explorer does: an mp3 plays in the default player.</summary>
     private void OnRowDoubleClick(object sender, MouseButtonEventArgs e)
     {
         // Ignore double-clicks on the column headers and scroll bars.
-        if (e.OriginalSource is FrameworkElement { DataContext: FileRow row })
-            ShowInExplorer(row.FilePath);
+        if (RowAt(e.OriginalSource) is { } row)
+            OpenEntry(row.FilePath);
+    }
+
+    private void OnOpenSelected(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRows.FirstOrDefault() is { } row)
+            OpenEntry(row.FilePath);
+    }
+
+    private void OpenEntry(string path)
+    {
+        if (File.Exists(path) || Directory.Exists(path))
+            Open(path);
+        else
+            MessageBox.Show(this, $"It is no longer there:\n\n{path}\n\nScan again to update the list.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    /// <summary>The row under the mouse, or null over the column headers, scroll bars or empty space.</summary>
+    private static FileRow? RowAt(object source) => FindRow(source as DependencyObject)?.Item as FileRow;
+
+    private static DataGridRow? FindRow(DependencyObject? element)
+    {
+        while (element is not null and not DataGridRow)
+            element = element is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(element)
+                : LogicalTreeHelper.GetParent(element);
+        return element as DataGridRow;
+    }
+
+    // --- Dragging files out ------------------------------------------------------
+    // Rows drag out like files from Explorer, into a player, a mail or a folder.
+
+    private Point? _dragStart;
+    private FileRow? _pressedRow;
+
+    /// <summary>True while rows are being dragged out, so the window doesn't take them as a folder to scan.</summary>
+    private bool _draggingOut;
+
+    private void OnGridMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStart = null;
+        _pressedRow = null;
+        if (e.ClickCount != 1 || FindRow(e.OriginalSource as DependencyObject) is not { Item: FileRow row })
+            return;
+
+        _dragStart = e.GetPosition(FileGrid);
+
+        // A press on a row that is already selected keeps the selection, so several files can be
+        // dragged together. A click that turns out not to be a drag selects just that row on release.
+        if (FileGrid.SelectedItems.Contains(row) && FileGrid.SelectedItems.Count > 1 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            _pressedRow = row;
+            e.Handled = true;
+        }
+    }
+
+    private void OnGridMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_pressedRow is { } row)
+        {
+            FileGrid.SelectedItems.Clear();
+            FileGrid.SelectedItem = row;
+        }
+        _dragStart = null;
+        _pressedRow = null;
+    }
+
+    private void OnGridMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragStart is not { } start || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var offset = e.GetPosition(FileGrid) - start;
+        if (Math.Abs(offset.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(offset.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        _dragStart = null;
+        _pressedRow = null;
+
+        // Not while a run may be renaming the files.
+        var paths = SelectedRows.Select(r => r.FilePath).Where(p => File.Exists(p) || Directory.Exists(p)).ToArray();
+        if (_cancellation is not null || paths.Length == 0)
+            return;
+
+        // Copy, not move: moving a file away would leave the list pointing at nothing.
+        var data = new DataObject(DataFormats.FileDrop, paths);
+        _draggingOut = true;
+        try
+        {
+            DragDrop.DoDragDrop(FileGrid, data, DragDropEffects.Copy | DragDropEffects.Link);
+        }
+        finally
+        {
+            _draggingOut = false;
+        }
     }
 
     private void OnShowInExplorer(object sender, RoutedEventArgs e)
@@ -391,7 +487,7 @@ public partial class MainWindow : Window
 
     private static void ShowInExplorer(string path)
     {
-        if (File.Exists(path))
+        if (File.Exists(path) || Directory.Exists(path))
             Process.Start("explorer.exe", $"/select,\"{path}\"");
     }
 

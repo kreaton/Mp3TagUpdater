@@ -31,7 +31,7 @@ To get a newer version later, click the ⓘ button and choose **Check for update
 3. Check the list. **Show** narrows it to the files with changes, to only the `Updatable` files, or to errors and warnings. **Hide OK** leaves out the files with nothing to change and no problems, and **Search** finds a file by path, title, artist or album.
 4. Choose **Apply N changes...** and confirm. The folder is read again and the changes are written.
 
-**Cancel** stops after the current file. Double-click a file to show it in Explorer, or right-click to copy its path.
+**Cancel** stops after the current file. Double-click a file to open it in its default program, so an mp3 plays in your usual player. Drag files from the list into another program or a folder, as from Explorer; several selected files drag together, and they are copied, never moved. Right-click to show a file in Explorer or copy its path.
 
 Untick **Include subfolders** to check only the top-level folder. Untick **Write CSV log** to skip the log. **Open log** opens the log of the last run. Tick **Fix æ, ø, å**, **Fix all file and folder names**, **Tags from file names** or **Album from folder name**, and choose **Split titles**, to use the options described below. A new value is shown as `→ value` in the list until it is applied.
 

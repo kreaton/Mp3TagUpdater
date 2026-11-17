@@ -101,7 +101,8 @@
                   SelectionMode="Extended" HeadersVisibility="Column" GridLinesVisibility="None"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True"
                   VirtualizingPanel.VirtualizationMode="Recycling"
-                  MouseDoubleClick="OnRowDoubleClick">
+                  MouseDoubleClick="OnRowDoubleClick"
+                  PreviewMouseLeftButtonDown="OnGridMouseDown" PreviewMouseMove="OnGridMouseMove" PreviewMouseLeftButtonUp="OnGridMouseUp">
             <DataGrid.Resources>
                 <Style x:Key="CellText" TargetType="TextBlock">
                     <Setter Property="VerticalAlignment" Value="Center" />
@@ -110,6 +111,7 @@
             </DataGrid.Resources>
             <DataGrid.ContextMenu>
                 <ContextMenu>
+                    <MenuItem Header="Open" FontWeight="SemiBold" Click="OnOpenSelected" InputGestureText="Double-click" />
                     <MenuItem Header="Show in Explorer" Click="OnShowInExplorer" />
                     <MenuItem Header="Copy path" Click="OnCopyPath" />
                 </ContextMenu>
