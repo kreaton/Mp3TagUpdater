@@ -177,7 +177,8 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
     /// into Artist and Title. The order is decided per folder unless the mode fixes it.</item>
     /// <item>With <see cref="Mp3RunOptions.FillFromFileName"/>, a missing Title, Artist, Track and Disc
     /// are read from the file name. See <see cref="FileNameTags"/>.</item>
-    /// <item>A missing Album is set to the folder name.</item>
+    /// <item>A missing Album is set to the folder name. With <see cref="Mp3RunOptions.ReplaceAlbum"/>,
+    /// an Album that is set is replaced by the folder name too.</item>
     /// <item>With <see cref="Mp3RunOptions.FixLetters"/>, misencoded letters in the file name are
     /// corrected, trusting the corrected tags where they spell a word differently.</item>
     /// </list>
@@ -262,8 +263,14 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
 
             var album = text.Album;
             var fillsAlbum = record.AlbumWasMissing;
+            var folderAlbum = options.FixNames ? FixedName(record.ContainingDirectoryName) : record.ContainingDirectoryName;
             if (fillsAlbum)
-                album = options.FixNames ? FixedName(record.ContainingDirectoryName) : record.ContainingDirectoryName;
+                album = folderAlbum;
+
+            // An album that is set is replaced only when the option asks, and only when it differs.
+            var replacesAlbum = options.ReplaceAlbum && !fillsAlbum && !string.Equals(record.Album, folderAlbum, StringComparison.Ordinal);
+            if (replacesAlbum)
+                album = folderAlbum;
 
             // Step 4: the file name, checked against the corrected title and artist.
             string? fileName = null;
@@ -287,6 +294,7 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
                 FixesLetters = text.Fixed || fileName is not null,
                 SplitsTitle = split,
                 FillsAlbum = fillsAlbum,
+                ReplacesAlbum = replacesAlbum,
                 FillsFromFileName = fromName
             };
 

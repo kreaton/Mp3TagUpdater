@@ -350,6 +350,38 @@ public sealed class Mp3LibraryTests : IDisposable
         Assert.Null(record.Edit);
     }
 
+    [Fact]
+    public void Set_album_is_kept_unless_the_option_replaces_it()
+    {
+        var path = TestMp3.Create(Path.Combine(_root, "100 Tangos", "song.mp3"), album: "100Tangos");
+
+        Assert.Equal(Mp3Status.Ok, Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root)).Records).Status);
+
+        var dryRun = Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root) { ReplaceAlbum = true }).Records);
+        Assert.Equal(Mp3Status.Updatable, dryRun.Status);
+        Assert.Equal(["Album \"100Tangos\" → \"100 Tangos\""], dryRun.Changes);
+        Assert.True(dryRun.Edit is { ReplacesAlbum: true, FillsAlbum: false });
+
+        var applied = Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root) { DryRun = false, ReplaceAlbum = true }).Records);
+        Assert.Equal(Mp3Status.Updated, applied.Status);
+        using (var file = TagLib.File.Create(path))
+            Assert.Equal("100 Tangos", file.Tag.Album);
+
+        // Once it matches, there is nothing more to do.
+        Assert.Equal(Mp3Status.Ok, Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root) { ReplaceAlbum = true }).Records).Status);
+    }
+
+    [Fact]
+    public void Replaced_album_uses_the_corrected_folder_name()
+    {
+        TestMp3.Create(Path.Combine(_root, "SÃ¸ren", "song.mp3"), album: "Old");
+
+        var record = Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root) { ReplaceAlbum = true, FixNames = true }).Records,
+            r => r.Kind == Mp3EntryKind.Mp3);
+
+        Assert.Equal("Søren", record.Edit?.Album);
+    }
+
     private sealed class ListProgress(List<Mp3Progress> reports) : IProgress<Mp3Progress>
     {
         public void Report(Mp3Progress value) => reports.Add(value);

@@ -38,6 +38,12 @@ public sealed record Mp3RunOptions(string Directory)
     public bool FixNames { get; init; }
 
     /// <summary>
+    /// Set every Album to the name of the folder holding the file, replacing albums that are
+    /// already set. Without it only missing albums get the folder name.
+    /// </summary>
+    public bool ReplaceAlbum { get; init; }
+
+    /// <summary>
     /// Fill in a missing Title, Artist, Track and Disc from file names such as
     /// "1-02 Artist - Title.mp3" or "02 Artist - Title.mp3". Tags that are set are left alone.
     /// See <see cref="FileNameTags"/>.

@@ -26,6 +26,9 @@ public sealed class AppSettings
     public bool FixNames { get; set; }
     public bool FromNames { get; set; }
 
+    /// <summary>Replace albums that are set with the folder name, not only missing ones.</summary>
+    public bool ReplaceAlbum { get; set; }
+
     /// <summary>Leave the files with OK status out of the list.</summary>
     public bool HideOk { get; set; }
     public TitleSplitMode SplitTitles { get; set; } = TitleSplitMode.Off;

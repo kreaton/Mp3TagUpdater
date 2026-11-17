@@ -7,7 +7,7 @@ public static class Program
 {
     private static readonly string[] KnownOptions =
     [
-        "--apply", "--dry-run", "--no-recursive", "--no-log", "--fix-letters", "--fix-names", "--from-names",
+        "--apply", "--dry-run", "--no-recursive", "--no-log", "--fix-letters", "--fix-names", "--from-names", "--album-from-folder",
         "--split-titles", "--split-titles=auto", "--split-titles=artist-first", "--split-titles=title-first"
     ];
 
@@ -18,7 +18,7 @@ public static class Program
 
         // --- Parse arguments -------------------------------------------------
         // Usage: Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
-        //                      [--fix-letters] [--fix-names] [--from-names] [--split-titles[=auto|artist-first|title-first]]
+        //                      [--fix-letters] [--fix-names] [--from-names] [--album-from-folder] [--split-titles[=auto|artist-first|title-first]]
         //
         // Dry-run is the DEFAULT behavior: no mp3 files are modified unless
         // --apply is explicitly passed. --dry-run is also accepted for
@@ -53,6 +53,7 @@ public static class Program
         bool fixLetters = args.Contains("--fix-letters");
         bool fixNames = args.Contains("--fix-names");
         bool fromNames = args.Contains("--from-names");
+        bool albumFromFolder = args.Contains("--album-from-folder");
         var splitTitles = args.LastOrDefault(a => a.StartsWith("--split-titles")) switch
         {
             null => TitleSplitMode.Off,
@@ -87,6 +88,7 @@ public static class Program
             FixLetters = fixLetters,
             FixNames = fixNames,
             FillFromFileName = fromNames,
+            ReplaceAlbum = albumFromFolder,
             SplitTitles = splitTitles
         };
         var result = library.Run(options, cancellation: cancellation.Token);
@@ -145,7 +147,7 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]");
-        Console.WriteLine("                [--fix-letters] [--fix-names] [--from-names]");
+        Console.WriteLine("                [--fix-letters] [--fix-names] [--from-names] [--album-from-folder]");
         Console.WriteLine("                [--split-titles[=auto|artist-first|title-first]]");
         Console.WriteLine();
         Console.WriteLine("Options:");
@@ -157,6 +159,8 @@ public static class Program
         Console.WriteLine("                   folders, not only mp3 files. Albums get the corrected folder name");
         Console.WriteLine("  --from-names     Fill in a missing Title, Artist, Track and Disc from file names");
         Console.WriteLine("                   such as \"1-02 Artist - Title.mp3\" or \"02 Artist - Title.mp3\"");
+        Console.WriteLine("  --album-from-folder  Set every Album to the folder name, replacing albums");
+        Console.WriteLine("                   that are already set (otherwise only missing albums are filled)");
         Console.WriteLine("  --split-titles   Split titles like \"Artist / Title\" into Artist and Title.");
         Console.WriteLine("                   The order is worked out per folder, or set it with");
         Console.WriteLine("                   =artist-first or =title-first");

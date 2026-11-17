@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         FixLettersBox.IsChecked = _settings.FixLetters;
         FixNamesBox.IsChecked = _settings.FixNames;
         FromNamesBox.IsChecked = _settings.FromNames;
+        ReplaceAlbumBox.IsChecked = _settings.ReplaceAlbum;
         SplitBox.SelectedIndex = (int)_settings.SplitTitles;
         HideOkBox.IsChecked = _settings.HideOk;
         UpdateButtons();
@@ -53,6 +54,7 @@ public partial class MainWindow : Window
         _settings.FixLetters = FixLettersBox.IsChecked == true;
         _settings.FixNames = FixNamesBox.IsChecked == true;
         _settings.FromNames = FromNamesBox.IsChecked == true;
+        _settings.ReplaceAlbum = ReplaceAlbumBox.IsChecked == true;
         _settings.SplitTitles = SplitMode;
         _settings.HideOk = HideOkBox.IsChecked == true;
         _settings.Save();
@@ -99,13 +101,14 @@ public partial class MainWindow : Window
             FixLetters = FixLettersBox.IsChecked == true,
             FixNames = FixNamesBox.IsChecked == true,
             FillFromFileName = FromNamesBox.IsChecked == true,
+            ReplaceAlbum = ReplaceAlbumBox.IsChecked == true,
             SplitTitles = SplitMode
         };
 
     private void UpdateButtons()
     {
         // Checked handlers fire while the XAML is still loading.
-        if (ScanButton is null || FolderBox is null || RecursiveBox is null || FixLettersBox is null || FixNamesBox is null || FromNamesBox is null || SplitBox is null)
+        if (ScanButton is null || FolderBox is null || RecursiveBox is null || FixLettersBox is null || FixNamesBox is null || FromNamesBox is null || ReplaceAlbumBox is null || SplitBox is null)
             return;
 
         var idle = _cancellation is null;
@@ -122,7 +125,7 @@ public partial class MainWindow : Window
         CancelButton.IsEnabled = !idle;
         // Installing an update restarts the app, so it must not be reachable during a run.
         AboutButton.IsEnabled = idle;
-        FolderBox.IsEnabled = RecursiveBox.IsEnabled = LogBox.IsEnabled = FixLettersBox.IsEnabled = FixNamesBox.IsEnabled = FromNamesBox.IsEnabled = SplitBox.IsEnabled = idle;
+        FolderBox.IsEnabled = RecursiveBox.IsEnabled = LogBox.IsEnabled = FixLettersBox.IsEnabled = FixNamesBox.IsEnabled = FromNamesBox.IsEnabled = ReplaceAlbumBox.IsEnabled = SplitBox.IsEnabled = idle;
     }
 
     // --- Running -----------------------------------------------------------------
@@ -142,6 +145,7 @@ public partial class MainWindow : Window
         var letters = edits.Count(e => e.FixesLetters);
         var splits = edits.Count(e => e.SplitsTitle);
         var albums = edits.Count(e => e.FillsAlbum);
+        var replacedAlbums = edits.Count(e => e.ReplacesAlbum);
         var fromNames = edits.Count(e => e.FillsFromFileName);
         var renames = edits.Count(e => e.FileName is not null);
 
@@ -156,6 +160,8 @@ public partial class MainWindow : Window
             lines.Add($"•  {Files(fromNames)} given missing tags (title, artist, track, disc) from the file name.");
         if (albums > 0)
             lines.Add($"•  {Files(albums)} given an Album tag from the folder name.");
+        if (replacedAlbums > 0)
+            lines.Add($"•  {Files(replacedAlbums)} given the folder name in place of their Album tag. Check the Album column first.");
         if (renames > 0)
             lines.Add($"•  {Files(renames)} renamed.");
         if (otherFiles > 0)

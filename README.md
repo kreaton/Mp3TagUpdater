@@ -33,7 +33,7 @@ To get a newer version later, click the ⓘ button and choose **Check for update
 
 **Cancel** stops after the current file. Double-click a file to show it in Explorer, or right-click to copy its path.
 
-Untick **Include subfolders** to check only the top-level folder. Untick **Write CSV log** to skip the log. **Open log** opens the log of the last run. Tick **Fix æ, ø, å**, **Fix all file and folder names** or **Tags from file names**, and choose **Split titles**, to use the options described below. A new value is shown as `→ value` in the list until it is applied.
+Untick **Include subfolders** to check only the top-level folder. Untick **Write CSV log** to skip the log. **Open log** opens the log of the last run. Tick **Fix æ, ø, å**, **Fix all file and folder names**, **Tags from file names** or **Album from folder name**, and choose **Split titles**, to use the options described below. A new value is shown as `→ value` in the list until it is applied.
 
 The folder and the options are remembered for the next start, in `%APPDATA%\Mp3TagUpdater\settings.json`.
 
@@ -64,6 +64,8 @@ Files with any other fault are left alone and listed as `Error`.
 ## Filling in missing albums
 
 A missing Album tag (empty or only whitespace) is set to the name of the folder directly containing the file. A file directly in the chosen folder therefore gets that folder's name. A file that is repaired in the same run can also get an album.
+
+Tick **Album from folder name** to replace albums that are already set as well, for example after renaming a folder. Every file then gets the name of its folder as Album, and files whose album already matches are left alone.
 
 Files with `Error` or `Warning` status are skipped, so tags are never rewritten on a file that may be damaged or not really an mp3.
 
@@ -196,7 +198,7 @@ dotnet run --project Mp3TagUpdater.Cli -- "C:\Music\Party"
 
 ```
 Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
-              [--fix-letters] [--fix-names] [--from-names] [--split-titles[=auto|artist-first|title-first]]
+              [--fix-letters] [--fix-names] [--from-names] [--album-from-folder] [--split-titles[=auto|artist-first|title-first]]
 ```
 
 | Option | Effect |
@@ -206,6 +208,7 @@ Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
 | `--no-log` | Don't write the CSV log. |
 | `--fix-letters` | Correct misencoded letters such as `Ã¸` in tags and file names. |
 | `--fix-names` | Correct misencoded letters in the names of all files and folders, not only mp3 files. |
+| `--album-from-folder` | Set every Album to the folder name, replacing albums that are already set. |
 | `--from-names` | Fill in a missing Title, Artist, Track and Disc from file names such as `1-02 Artist - Title.mp3`. |
 | `--split-titles` | Split "Artist / Title" titles, with the order worked out per folder. Add `=artist-first` or `=title-first` to fix the order. |
 | `-h`, `--help` | Show help. |

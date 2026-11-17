@@ -55,6 +55,9 @@ public sealed record Mp3TagEdit
     /// <summary>A missing Album is filled in from the folder name.</summary>
     public bool FillsAlbum { get; init; }
 
+    /// <summary>An Album that was set is replaced by the folder name.</summary>
+    public bool ReplacesAlbum { get; init; }
+
     /// <summary>Missing tags are filled in from the file name.</summary>
     public bool FillsFromFileName { get; init; }
 

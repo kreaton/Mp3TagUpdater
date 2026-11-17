@@ -33,7 +33,7 @@
                       Checked="OnOptionChanged" Unchecked="OnOptionChanged" />
             <CheckBox x:Name="LogBox" Content="Write CSV log" IsChecked="True" Margin="24,0,0,0" VerticalAlignment="Center"
                       ToolTip="Writes mp3-log-YYYYMMDD-HHMMSS.csv to the folder, with every file's details, tags and errors." />
-            <CheckBox x:Name="FixLettersBox" Content="Fix æ, ø, å" Margin="24,0,0,0" VerticalAlignment="Center"
+            <CheckBox x:Name="FixLettersBox" Content="Fix mojibake" Margin="24,0,0,0" VerticalAlignment="Center"
                       Checked="OnOptionChanged" Unchecked="OnOptionChanged"
                       ToolTip="Corrects letters shown as two characters, such as &quot;Ã¸&quot; for &quot;ø&quot;, in the tags and file names. Other letters such as ä, ö and é are corrected too." />
             <CheckBox x:Name="FixNamesBox" Content="Fix all file and folder names" Margin="24,0,0,0" VerticalAlignment="Center"
@@ -42,6 +42,9 @@
             <CheckBox x:Name="FromNamesBox" Content="Tags from file names" Margin="24,0,0,0" VerticalAlignment="Center"
                       Checked="OnOptionChanged" Unchecked="OnOptionChanged"
                       ToolTip="Fills in a missing Title, Artist, Track and Disc from file names such as &quot;1-02 Artist - Title.mp3&quot;, &quot;02 Artist - Title.mp3&quot; or &quot;Artist - Title.mp3&quot;. Tags that are already set are left alone." />
+            <CheckBox x:Name="ReplaceAlbumBox" Content="Album from folder name" Margin="24,0,0,0" VerticalAlignment="Center"
+                      Checked="OnOptionChanged" Unchecked="OnOptionChanged"
+                      ToolTip="Sets every Album to the name of the folder holding the file, replacing albums that are already set. Without it only missing albums get the folder name." />
             <Label Content="Split _titles" Target="{Binding ElementName=SplitBox}" VerticalAlignment="Center" Margin="24,0,8,0" />
             <ComboBox x:Name="SplitBox" SelectedIndex="0" VerticalAlignment="Center" MinWidth="200" SelectionChanged="OnSplitChanged"
                       ToolTip="Moves the artist out of titles such as &quot;Artist / Title&quot; into the Artist tag. Automatic works out the order for each folder; check the result before applying.">
