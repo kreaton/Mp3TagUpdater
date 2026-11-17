@@ -1,3 +1,6 @@
 <Solution>
-  <Project Path="Mp3TagUpdater/Mp3TagUpdater.csproj" />
+  <Project Path="Mp3TagUpdater.Cli/Mp3TagUpdater.Cli.csproj" />
+  <Project Path="Mp3TagUpdater.Core/Mp3TagUpdater.Core.csproj" />
+  <Project Path="Mp3TagUpdater.Tests/Mp3TagUpdater.Tests.csproj" />
+  <Project Path="Mp3TagUpdater.Wpf/Mp3TagUpdater.Wpf.csproj" />
 </Solution>

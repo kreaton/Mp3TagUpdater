@@ -1,7 +1,7 @@
 using Mp3TagUpdater.Models;
 using Mp3TagUpdater.Services;
 
-namespace Mp3TagUpdater;
+namespace Mp3TagUpdater.Cli;
 
 public static class Program
 {
@@ -49,26 +49,34 @@ public static class Program
             return 1;
         }
 
-        var library = new Mp3Library();
+        // Changes and failures are printed as they happen; everything else goes in the log.
+        var library = new Mp3Library(message =>
+            WriteColored(message.Kind == Mp3MessageKind.Error ? ConsoleColor.Red : ConsoleColor.Yellow, "  " + message.Text));
 
-        // --- Read every mp3 file's tags into a list of records ---------------
-        var records = library.ReadTags(directory, recursive);
+        // Ctrl+C stops after the current file, so no file is left half written.
+        using var cancellation = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cancellation.Cancel();
+        };
+
+        // --- Read every mp3, repair unreadable files, fill in missing albums --
+        var result = library.Run(new Mp3RunOptions(directory) { DryRun = dryRun, Recursive = recursive }, cancellation: cancellation.Token);
+        var records = result.Records;
 
         if (records.Count == 0)
         {
-            Console.WriteLine("No .mp3 files found.");
-            return 0;
+            Console.WriteLine(result.Cancelled ? "Cancelled." : "No .mp3 files found.");
+            return result.Cancelled ? 130 : 0;
         }
 
-        // --- Repair unreadable files, then fill in missing albums ------------
-        // Repairs come first so that a repaired file can also get an album.
-        records = library.RepairUnreadableFiles(records, dryRun);
-        records = library.UpdateMissingAlbumTags(records, dryRun);
+        Console.WriteLine("Summary: " + result.Summary);
 
-        Console.WriteLine("Summary: " + string.Join(", ",
-            records.GroupBy(r => r.Status).OrderBy(g => g.Key).Select(g => $"{g.Key} {g.Count()}")));
+        if (result.Cancelled)
+            WriteError("Cancelled before every file was handled.");
 
-        if (dryRun && records.Any(r => r.Changes.Count > 0))
+        if (dryRun && result.HasChanges)
             Console.WriteLine("No files were modified. Pass --apply to write these changes.");
 
         // --- Write the CSV log -----------------------------------------------
@@ -85,12 +93,14 @@ public static class Program
             }
         }
 
-        return 0;
+        return result.Cancelled ? 130 : 0;
     }
 
-    private static void WriteError(string message)
+    private static void WriteError(string message) => WriteColored(ConsoleColor.Red, message);
+
+    private static void WriteColored(ConsoleColor color, string message)
     {
-        Console.ForegroundColor = ConsoleColor.Red;
+        Console.ForegroundColor = color;
         Console.WriteLine(message);
         Console.ResetColor();
     }

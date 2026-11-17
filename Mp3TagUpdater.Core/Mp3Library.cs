@@ -4,28 +4,51 @@ namespace Mp3TagUpdater.Services;
 
 /// <summary>
 /// Handles scanning a directory for mp3 files, reading their tags into
-/// Mp3TagRecord instances, and updating the Album tag from the folder
-/// name when it is missing.
+/// Mp3TagRecord instances, repairing files that can't be read, and updating
+/// the Album tag from the folder name when it is missing.
 /// </summary>
-public class Mp3Library
+/// <param name="onMessage">
+/// Receives a line for each proposed or actual change and each failed write.
+/// It is called on the thread doing the work.
+/// </param>
+public class Mp3Library(Action<Mp3Message>? onMessage = null)
 {
+    /// <summary>
+    /// Reads every mp3 in <see cref="Mp3RunOptions.Directory"/>, repairs unreadable
+    /// files and fills in missing albums. Repairs come first so that a repaired file
+    /// can also get an album. A cancelled run stops before the next file, and the
+    /// files it didn't reach keep the record they had at that point.
+    /// </summary>
+    public Mp3RunResult Run(Mp3RunOptions options, IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default)
+    {
+        var records = ReadTags(options.Directory, options.Recursive, progress, cancellation);
+        records = RepairUnreadableFiles(records, options.DryRun, progress, cancellation);
+        records = UpdateMissingAlbumTags(records, options.DryRun, progress, cancellation);
+        return new Mp3RunResult(records, cancellation.IsCancellationRequested);
+    }
+
     /// <summary>
     /// Recursively (or top-level only) scans <paramref name="rootDirectory"/> for
     /// .mp3 files and reads their tag data into a list of records. A file that
     /// can't be read still gets a record, with its status set to Error.
     /// </summary>
-    public List<Mp3TagRecord> ReadTags(string rootDirectory, bool recursive = true)
+    public List<Mp3TagRecord> ReadTags(string rootDirectory, bool recursive = true,
+        IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default)
     {
         if (!Directory.Exists(rootDirectory))
             throw new DirectoryNotFoundException($"Directory not found: {rootDirectory}");
 
         var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        var mp3Files = Directory.EnumerateFiles(rootDirectory, "*.mp3", searchOption);
+        progress?.Report(new Mp3Progress("Finding mp3 files", 0, 0));
+        var mp3Files = Directory.EnumerateFiles(rootDirectory, "*.mp3", searchOption).ToList();
 
         var records = new List<Mp3TagRecord>();
 
         foreach (var filePath in mp3Files)
         {
+            if (cancellation.IsCancellationRequested)
+                break;
+
             try
             {
                 records.Add(ReadSingleFile(filePath));
@@ -38,6 +61,8 @@ public class Mp3Library
                     Errors = [ex.Message]
                 });
             }
+
+            progress?.Report(new Mp3Progress("Reading tags", records.Count, mp3Files.Count));
         }
 
         return records;
@@ -48,10 +73,11 @@ public class Mp3Library
     /// verified in memory. The file is only changed if <paramref name="dryRun"/>
     /// is false, and the original is then kept alongside it as .bak.
     /// </summary>
-    public List<Mp3TagRecord> RepairUnreadableFiles(List<Mp3TagRecord> records, bool dryRun = true) =>
-        records.Select(r => r.Status == Mp3Status.Error ? RepairFile(r, dryRun) : r).ToList();
+    public List<Mp3TagRecord> RepairUnreadableFiles(List<Mp3TagRecord> records, bool dryRun = true,
+        IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default) =>
+        Process(records, "Repairing", r => r.Status == Mp3Status.Error, r => RepairFile(r, dryRun), progress, cancellation);
 
-    private static Mp3TagRecord RepairFile(Mp3TagRecord record, bool dryRun)
+    private Mp3TagRecord RepairFile(Mp3TagRecord record, bool dryRun)
     {
         try
         {
@@ -62,9 +88,9 @@ public class Mp3Library
             // Throws if TagLib still can't read the repaired data.
             var verified = ReadFromMemory(record.FilePath, repair.Data);
 
-            WriteColored(ConsoleColor.Yellow, dryRun
-                ? $"  [DRY RUN] Would repair {record.FileName}: {string.Join("; ", repair.Actions)}"
-                : $"  Repairing {record.FileName}: {string.Join("; ", repair.Actions)}");
+            Report(Mp3MessageKind.Change, dryRun
+                ? $"[DRY RUN] Would repair {record.FileName}: {string.Join("; ", repair.Actions)}"
+                : $"Repairing {record.FileName}: {string.Join("; ", repair.Actions)}");
 
             if (dryRun)
             {
@@ -89,7 +115,7 @@ public class Mp3Library
         {
             // A dry run changes nothing, so its failures belong only in the log.
             if (!dryRun)
-                WriteColored(ConsoleColor.Red, $"  Failed to repair '{record.FilePath}': {ex.Message}");
+                Report(Mp3MessageKind.Error, $"Failed to repair '{record.FilePath}': {ex.Message}");
 
             return record with { Errors = [.. record.Errors, $"Repair failed: {ex.Message}"] };
         }
@@ -100,21 +126,49 @@ public class Mp3Library
     /// Files that are unreadable or flagged with a warning are skipped, so that
     /// tags are never rewritten on a file that may be damaged or not really an mp3.
     /// </summary>
-    public List<Mp3TagRecord> UpdateMissingAlbumTags(List<Mp3TagRecord> records, bool dryRun = true) =>
-        records.Select(r => CanUpdateAlbum(r) ? UpdateAlbum(r, dryRun) : r).ToList();
+    public List<Mp3TagRecord> UpdateMissingAlbumTags(List<Mp3TagRecord> records, bool dryRun = true,
+        IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default) =>
+        Process(records, "Filling in albums", CanUpdateAlbum, r => UpdateAlbum(r, dryRun), progress, cancellation);
+
+    /// <summary>
+    /// Applies <paramref name="change"/> to each record it is meant for, in order.
+    /// After cancellation the remaining records are returned as they are.
+    /// </summary>
+    private static List<Mp3TagRecord> Process(List<Mp3TagRecord> records, string phase,
+        Func<Mp3TagRecord, bool> applies, Func<Mp3TagRecord, Mp3TagRecord> change,
+        IProgress<Mp3Progress>? progress, CancellationToken cancellation)
+    {
+        var result = new List<Mp3TagRecord>(records.Count);
+        var total = records.Count(applies);
+        var done = 0;
+
+        foreach (var record in records)
+        {
+            if (cancellation.IsCancellationRequested || !applies(record))
+            {
+                result.Add(record);
+                continue;
+            }
+
+            result.Add(change(record));
+            progress?.Report(new Mp3Progress(phase, ++done, total));
+        }
+
+        return result;
+    }
 
     private static bool CanUpdateAlbum(Mp3TagRecord record) =>
         record.AlbumWasMissing &&
         record.Status is Mp3Status.Ok or Mp3Status.Repairable or Mp3Status.Repaired;
 
-    private static Mp3TagRecord UpdateAlbum(Mp3TagRecord record, bool dryRun)
+    private Mp3TagRecord UpdateAlbum(Mp3TagRecord record, bool dryRun)
     {
         var album = record.ContainingDirectoryName;
         IReadOnlyList<string> changes = [.. record.Changes, $"Set Album to \"{album}\""];
 
         if (dryRun)
         {
-            WriteColored(ConsoleColor.Yellow, $"  [DRY RUN] Would set Album to \"{album}\": {record.FileName}");
+            Report(Mp3MessageKind.Change, $"[DRY RUN] Would set Album to \"{album}\": {record.FileName}");
             return record with
             {
                 Status = record.Status == Mp3Status.Ok ? Mp3Status.Updatable : record.Status,
@@ -125,7 +179,7 @@ public class Mp3Library
         try
         {
             WriteAlbumTag(record.FilePath, album);
-            WriteColored(ConsoleColor.Yellow, $"  Set Album to \"{album}\": {record.FileName}");
+            Report(Mp3MessageKind.Change, $"Set Album to \"{album}\": {record.FileName}");
 
             return ReadSingleFile(record.FilePath) with
             {
@@ -136,7 +190,7 @@ public class Mp3Library
         }
         catch (Exception ex)
         {
-            WriteColored(ConsoleColor.Red, $"  Failed to set Album on '{record.FilePath}': {ex.Message}");
+            Report(Mp3MessageKind.Error, $"Failed to set Album on '{record.FilePath}': {ex.Message}");
             return record with
             {
                 Status = Mp3Status.Error,
@@ -144,6 +198,8 @@ public class Mp3Library
             };
         }
     }
+
+    private void Report(Mp3MessageKind kind, string text) => onMessage?.Invoke(new Mp3Message(kind, text));
 
     /// <summary>
     /// Writes the tag to a temporary copy and then swaps it in, so a failed save
@@ -267,13 +323,6 @@ public class Mp3Library
             Created = info.CreationTime,
             Modified = info.LastWriteTime
         };
-    }
-
-    private static void WriteColored(ConsoleColor color, string message)
-    {
-        Console.ForegroundColor = color;
-        Console.WriteLine(message);
-        Console.ResetColor();
     }
 
     /// <summary>Lets TagLib read file contents held in memory. Its name selects the mp3 parser.</summary>

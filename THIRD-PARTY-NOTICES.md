@@ -9,6 +9,7 @@ _Last reviewed: 2026-11-17. Versions are the ones resolved in this repository at
 | Library | Version | Licence | Source | Modified |
 |---|---|---|---|---|
 | TagLibSharp | 2.3.0 | LGPL-2.1-only — used unmodified as a separate, replaceable `TagLibSharp.dll` | [NuGet](https://www.nuget.org/packages/TagLibSharp/2.3.0) · [source](https://github.com/mono/taglib-sharp) | No |
+| Velopack | 1.2.161 | MIT | [NuGet](https://www.nuget.org/packages/Velopack/1.2.161) · [source](https://github.com/velopack/velopack) | No |
 
 ## Build, test and tooling (not distributed)
 
@@ -16,11 +17,19 @@ Used to build, test or render promotional material only; not part of the shipped
 
 | Library | Version | Licence | Source | Modified |
 |---|---|---|---|---|
-| .NET Runtime (prerequisite, installed separately; not bundled) | 10.0 | MIT | [dotnet/runtime](https://github.com/dotnet/runtime) | No |
+| .NET Desktop Runtime (prerequisite, installed separately; not bundled) | 10.0 | MIT | [dotnet/runtime](https://github.com/dotnet/runtime) | No |
+| coverlet.collector | 6.0.4 | MIT | [NuGet](https://www.nuget.org/packages/coverlet.collector/6.0.4) · [source](https://github.com/coverlet-coverage/coverlet) | No |
+| Microsoft.NET.Test.Sdk | 17.14.1 | MIT | [NuGet](https://www.nuget.org/packages/Microsoft.NET.Test.Sdk/17.14.1) · [source](https://github.com/microsoft/vstest) | No |
+| xunit | 2.9.3 | Apache-2.0 | [NuGet](https://www.nuget.org/packages/xunit/2.9.3) · [source](https://github.com/xunit/xunit) | No |
+| xunit.runner.visualstudio | 3.1.4 | Apache-2.0 | [NuGet](https://www.nuget.org/packages/xunit.runner.visualstudio/3.1.4) · [source](https://github.com/xunit/visualstudio.xunit) | No |
 
 ## Icons, images, audio and video
 
-This repository contains no icons, images, audio or video files.
+| Asset(s) | Origin | Licence |
+|---|---|---|
+| `Mp3TagUpdater.Wpf/app.ico`, `images/banner.png` | Drawn in code (Python with Pillow) for this project with Claude Code, under the author's direction. The banner text is set in Segoe UI from the Windows fonts folder and is rendered into the image; no font file is distributed | MIT (as part of this project) |
+
+The test suite writes its own mp3 files at run time; none are stored in the repository.
 
 ## Trademarks
 

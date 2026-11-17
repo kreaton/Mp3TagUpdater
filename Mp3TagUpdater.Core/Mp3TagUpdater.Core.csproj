@@ -1,14 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- UI-free scanning, repair and tagging API, used by both the CLI and the WPF app. -->
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Mp3TagUpdater</RootNamespace>
-    <AssemblyName>Mp3TagUpdater</AssemblyName>
-    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mp3TagUpdater.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- TagLibSharp provides read/write access to MP3 (ID3v1/ID3v2) tags -->
