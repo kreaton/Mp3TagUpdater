@@ -28,12 +28,23 @@
                  ToolTip="The folder of mp3 files to check. You can also drop a folder on the window." />
         <Button Grid.Row="0" Grid.Column="2" Content="Browse..." Margin="0,0,0,8" Click="OnBrowse" />
 
-        <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,8">
+        <WrapPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,8">
             <CheckBox x:Name="RecursiveBox" Content="Include subfolders" IsChecked="True" VerticalAlignment="Center"
                       Checked="OnOptionChanged" Unchecked="OnOptionChanged" />
             <CheckBox x:Name="LogBox" Content="Write CSV log" IsChecked="True" Margin="24,0,0,0" VerticalAlignment="Center"
                       ToolTip="Writes mp3-log-YYYYMMDD-HHMMSS.csv to the folder, with every file's details, tags and errors." />
-        </StackPanel>
+            <CheckBox x:Name="FixLettersBox" Content="Fix æ, ø, å" Margin="24,0,0,0" VerticalAlignment="Center"
+                      Checked="OnOptionChanged" Unchecked="OnOptionChanged"
+                      ToolTip="Corrects letters shown as two characters, such as &quot;Ã¸&quot; for &quot;ø&quot;, in the tags and file names. Other letters such as ä, ö and é are corrected too." />
+            <Label Content="Split _titles" Target="{Binding ElementName=SplitBox}" VerticalAlignment="Center" Margin="24,0,8,0" />
+            <ComboBox x:Name="SplitBox" SelectedIndex="0" VerticalAlignment="Center" MinWidth="200" SelectionChanged="OnSplitChanged"
+                      ToolTip="Moves the artist out of titles such as &quot;Artist / Title&quot; into the Artist tag. Automatic works out the order for each folder; check the result before applying.">
+                <ComboBoxItem Content="Off" />
+                <ComboBoxItem Content="Automatic, per folder" />
+                <ComboBoxItem Content="Artist / Title" />
+                <ComboBoxItem Content="Title / Artist" />
+            </ComboBox>
+        </WrapPanel>
 
         <DockPanel Grid.Row="2" Grid.ColumnSpan="3" Margin="0,4,0,12">
             <Button x:Name="AboutButton" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnAbout" ToolTip="About Mp3TagUpdater and updates"
@@ -44,7 +55,7 @@
                 <Button x:Name="ScanButton" Content="Scan" MinWidth="96" IsEnabled="False" Style="{StaticResource AccentButtonStyle}" Click="OnScan"
                         ToolTip="Reads every mp3 and lists what would change. Nothing is written to the mp3 files." />
                 <Button x:Name="ApplyButton" Content="Apply changes..." Margin="8,0,0,0" IsEnabled="False" Click="OnApply"
-                        ToolTip="Repairs the damaged files and fills in the missing albums found by the last scan." />
+                        ToolTip="Writes the repairs, tag changes and new file names found by the last scan." />
                 <Button x:Name="CancelButton" Content="Cancel" MinWidth="96" Margin="8,0,0,0" IsEnabled="False" Click="OnCancel" />
                 <Button x:Name="OpenLogButton" Content="Open log" Margin="24,0,0,0" Visibility="Collapsed" Click="OnOpenLog" />
                 <Button x:Name="OpenFolderButton" Content="Open folder" Margin="8,0,0,0" Visibility="Collapsed" Click="OnOpenFolder" />

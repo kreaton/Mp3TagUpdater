@@ -26,12 +26,33 @@ public partial class MainWindow : Window
     private Mp3RunOptions? _scanned;
     private string? _logPath;
 
+    private readonly AppSettings _settings = AppSettings.Load();
+
     public MainWindow()
     {
         InitializeComponent();
         _refresh.Tick += (_, _) => ShowProgress();
+
+        FolderBox.Text = _settings.Folder ?? "";
+        RecursiveBox.IsChecked = _settings.Recursive;
+        LogBox.IsChecked = _settings.WriteLog;
+        FixLettersBox.IsChecked = _settings.FixLetters;
+        SplitBox.SelectedIndex = (int)_settings.SplitTitles;
         UpdateButtons();
     }
+
+    /// <summary>Remembers the folder and options for the next start.</summary>
+    private void SaveSettings()
+    {
+        _settings.Folder = FolderBox.Text.Trim() is { Length: > 0 } folder ? folder : _settings.Folder;
+        _settings.Recursive = RecursiveBox.IsChecked == true;
+        _settings.WriteLog = LogBox.IsChecked == true;
+        _settings.FixLetters = FixLettersBox.IsChecked == true;
+        _settings.SplitTitles = SplitMode;
+        _settings.Save();
+    }
+
+    private TitleSplitMode SplitMode => SplitBox.SelectedIndex is >= 0 and <= 3 ? (TitleSplitMode)SplitBox.SelectedIndex : TitleSplitMode.Off;
 
     // --- Choosing a folder -------------------------------------------------------
 
@@ -62,13 +83,21 @@ public partial class MainWindow : Window
 
     private void OnOptionChanged(object sender, RoutedEventArgs e) => UpdateButtons();
 
+    private void OnSplitChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
+
     private Mp3RunOptions CurrentOptions(bool dryRun) =>
-        new(Path.TrimEndingDirectorySeparator(FolderBox.Text.Trim())) { DryRun = dryRun, Recursive = RecursiveBox.IsChecked == true };
+        new(Path.TrimEndingDirectorySeparator(FolderBox.Text.Trim()))
+        {
+            DryRun = dryRun,
+            Recursive = RecursiveBox.IsChecked == true,
+            FixLetters = FixLettersBox.IsChecked == true,
+            SplitTitles = SplitMode
+        };
 
     private void UpdateButtons()
     {
         // Checked handlers fire while the XAML is still loading.
-        if (ScanButton is null || FolderBox is null || RecursiveBox is null)
+        if (ScanButton is null || FolderBox is null || RecursiveBox is null || FixLettersBox is null || SplitBox is null)
             return;
 
         var idle = _cancellation is null;
@@ -83,7 +112,7 @@ public partial class MainWindow : Window
         CancelButton.IsEnabled = !idle;
         // Installing an update restarts the app, so it must not be reachable during a run.
         AboutButton.IsEnabled = idle;
-        FolderBox.IsEnabled = RecursiveBox.IsEnabled = LogBox.IsEnabled = idle;
+        FolderBox.IsEnabled = RecursiveBox.IsEnabled = LogBox.IsEnabled = FixLettersBox.IsEnabled = SplitBox.IsEnabled = idle;
     }
 
     // --- Running -----------------------------------------------------------------
@@ -95,13 +124,23 @@ public partial class MainWindow : Window
         var options = CurrentOptions(dryRun: false);
         var changed = _rows.Where(r => r.HasChanges).ToList();
         var repairs = changed.Count(r => r.Record.Status == Mp3Status.Repairable);
-        var albums = changed.Count(r => r.AlbumPending);
+        var edits = changed.Select(r => r.Edit).OfType<Mp3TagEdit>().ToList();
+        var letters = edits.Count(e => e.FixesLetters);
+        var splits = edits.Count(e => e.SplitsTitle);
+        var albums = edits.Count(e => e.FillsAlbum);
+        var renames = edits.Count(e => e.FileName is not null);
 
         var lines = new List<string>();
         if (repairs > 0)
             lines.Add($"•  {Files(repairs)} repaired. Each original is kept next to it as .bak.");
+        if (letters > 0)
+            lines.Add($"•  {Files(letters)} given corrected letters (æ, ø, å and others).");
+        if (splits > 0)
+            lines.Add($"•  {Files(splits)} given the artist from the title. Check the Artist and Title columns first.");
         if (albums > 0)
             lines.Add($"•  {Files(albums)} given an Album tag from the folder name.");
+        if (renames > 0)
+            lines.Add($"•  {Files(renames)} renamed.");
 
         var answer = MessageBox.Show(
             this,
@@ -126,6 +165,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        SaveSettings();
         var writeLog = LogBox.IsChecked == true;
         _latest = null;
         _logPath = null;
@@ -237,7 +277,10 @@ public partial class MainWindow : Window
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_cancellation is null)
+        {
+            SaveSettings();
             return;
+        }
         e.Cancel = true;
         _closeWhenDone = true;
         RequestCancel();

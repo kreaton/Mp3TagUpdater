@@ -10,7 +10,7 @@
 
 **Fix the mp3 files your player can't read, and give every song an album.**
 
-Mp3TagUpdater checks a folder of `.mp3` files, repairs tag faults that make files unreadable, and fills in missing Album tags from the folder name.
+Mp3TagUpdater checks a folder of `.mp3` files, repairs tag faults that make files unreadable, and fills in missing Album tags from the folder name. It can also correct Danish letters that show as two characters ("Ã¸" for "ø"), and move the artist out of titles such as "Artist / Title".
 
 - **Safe by default:** a scan only shows what would change. Nothing is written until you choose **Apply**.
 - **Every file at a glance:** status, album, artist, title, length, and what would change or went wrong.
@@ -33,7 +33,9 @@ To get a newer version later, click the ⓘ button and choose **Check for update
 
 **Cancel** stops after the current file. Double-click a file to show it in Explorer, or right-click to copy its path.
 
-Untick **Include subfolders** to check only the top-level folder. Untick **Write CSV log** to skip the log. **Open log** opens the log of the last run.
+Untick **Include subfolders** to check only the top-level folder. Untick **Write CSV log** to skip the log. **Open log** opens the log of the last run. Tick **Fix æ, ø, å** and choose **Split titles** to use the options described below. A new value is shown as `→ value` in the list until it is applied.
+
+The folder and the options are remembered for the next start, in `%APPDATA%\Mp3TagUpdater\settings.json`.
 
 | Status | Meaning |
 |---|---|
@@ -41,8 +43,8 @@ Untick **Include subfolders** to check only the top-level folder. Untick **Write
 | `Warning` | Readable, but possibly corrupt or containing no MPEG audio, such as a WAV named `.mp3` |
 | `Repairable` | Unreadable, but **Apply** can repair it (the tags shown are from the verified repair) |
 | `Repaired` | Was unreadable, and this run repaired it |
-| `Updatable` | Readable and missing its Album tag, which **Apply** would fill in |
-| `Updated` | Was missing its Album tag, and this run filled it in |
+| `Updatable` | Readable, and **Apply** would change its tags or its name |
+| `Updated` | This run changed its tags or its name |
 | `Error` | Unreadable, with no automatic repair available |
 
 ## Repairing files
@@ -65,7 +67,36 @@ A missing Album tag (empty or only whitespace) is set to the name of the folder 
 
 Files with `Error` or `Warning` status are skipped, so tags are never rewritten on a file that may be damaged or not really an mp3.
 
-Each album is saved to a temporary copy that is then swapped in, so a failed save can't damage the original. The modified time is kept, but no `.bak` is made.
+All tag changes are saved to a temporary copy that is then swapped in, so a failed save can't damage the original. The modified time is kept, but no `.bak` is made.
+
+## Correcting æ, ø and å
+
+Some rippers stored the letters as UTF-8 but marked them as Latin-1, so a player shows each one as two characters: `Ã¦` for æ, `Ã¸` for ø and `Ã¥` for å. **Fix æ, ø, å** corrects them in Title, Artist, Album, Album Artist and the file name. Other letters with the same fault are corrected too, such as ä, ö, é and ´.
+
+In the capital letters Æ, Ø and Å (and Ä, Ö) the second character is often lost or turned into a space, as in `Mine Ã jne`. The letter is then looked up in the file name, so `Mine Ã jne` becomes `Mine Øjne` when the file is called `Mine Øjne De Skal Se.mp3`. If neither the file name nor the tags tell which letter it was, the text is left as it is and the file gets a note in the `Errors` column.
+
+A file name is checked against the corrected tags. Where they spell a word differently, the tag wins, so `VÃœr vor gÃœst.mp3` is renamed to `Vær vor gæst.mp3` when that is the title. A file is never renamed over an existing file.
+
+## Splitting "Artist / Title"
+
+Many compilations put the artist in the title, as in `George Michael / Careless Whisper`, and set Artist to "Various". **Split titles** moves the artist to the Artist tag and leaves only the song in Title.
+
+| Choice | Effect |
+|---|---|
+| **Off** | Titles are left as they are |
+| **Automatic, per folder** | Works out for each folder whether the artist comes first or last. See below. |
+| **Artist / Title** | The artist always comes first |
+| **Title / Artist** | The artist always comes last |
+
+A title is split at ` / `, or at a bare `/` when the title has no ` - ` (`Razz/Kickflipper`). In `Kasper Winding/Lars Muhl - Sjæl I Flammer` the `/` is part of the artist, so the title is left alone.
+
+**Automatic** looks at every title in the scan for clues to which half is the artist:
+- The half is a known artist: it's an Artist tag elsewhere, or the first part of an "Artist - Title" title.
+- The same half appears in more than one title.
+- The half reads like a Eurovision entry: `Charlotte Nilsson, Sverige - 1999`.
+- The half joins names with `&`, `feat.` or a comma.
+
+A half in parentheses or ending in `?` or `!` counts as the song. If the clues are even, the artist is taken to come first, which is the more common order. Check the Artist and Title columns after a scan, because a folder that mixes both orders gets some of them wrong.
 
 ## CSV log
 
@@ -95,6 +126,8 @@ Mp3TagUpdater.Core/
 ├── Mp3Run.cs          # run options, progress, messages and result
 ├── Mp3TagRecord.cs    # immutable record of one file's details, tags and status
 ├── Mp3Library.cs      # scanning, reading, repairing and updating
+├── MisencodedText.cs  # corrects UTF-8 letters read as Windows-1252 ("Ã¸" → "ø")
+├── ArtistTitleSplit.cs # splits "Artist / Title" and works out the order per folder
 ├── Id3v2Repair.cs     # byte-level repair of damaged ID3v2 tags
 └── Mp3CsvLog.cs       # CSV log writer
 ```
@@ -121,13 +154,16 @@ dotnet run --project Mp3TagUpdater.Cli -- "C:\Music\Party"
 
 ```
 Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
+              [--fix-letters] [--split-titles[=auto|artist-first|title-first]]
 ```
 
 | Option | Effect |
 |---|---|
-| `--apply` | Write repairs and Album tags to disk. Without it, changes are only proposed. |
+| `--apply` | Write repairs, tags and new file names to disk. Without it, changes are only proposed. |
 | `--no-recursive` | Scan only the top-level directory, not subfolders. |
 | `--no-log` | Don't write the CSV log. |
+| `--fix-letters` | Correct misencoded letters such as `Ã¸` in tags and file names. |
+| `--split-titles` | Split "Artist / Title" titles, with the order worked out per folder. Add `=artist-first` or `=title-first` to fix the order. |
 | `-h`, `--help` | Show help. |
 
 The console lists only proposed or actual changes, followed by a summary. Ctrl+C stops after the current file.

@@ -23,6 +23,15 @@ public sealed record Mp3RunOptions(string Directory)
 
     /// <summary>Scan subfolders as well as the top-level directory.</summary>
     public bool Recursive { get; init; } = true;
+
+    /// <summary>
+    /// Correct letters stored as UTF-8 but read as Windows-1252 ("Ã¸" for "ø") in the tags and
+    /// file names. See <see cref="MisencodedText"/>.
+    /// </summary>
+    public bool FixLetters { get; init; }
+
+    /// <summary>Move the artist out of titles such as "Artist / Title". See <see cref="ArtistTitleSplit"/>.</summary>
+    public TitleSplitMode SplitTitles { get; init; } = TitleSplitMode.Off;
 }
 
 /// <summary>Every file's record, and whether the run stopped early.</summary>

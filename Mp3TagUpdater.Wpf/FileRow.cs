@@ -26,14 +26,14 @@ public sealed class FileRow(Mp3TagRecord record, string rootDirectory)
 
     public bool HasChanges => Record.Changes.Count > 0;
 
-    /// <summary>True when an album will be filled in, so the grid can show the album it will get.</summary>
-    public bool AlbumPending => Record.AlbumWasMissing && HasChanges && Record.Status is Mp3Status.Updatable or Mp3Status.Repairable;
+    /// <summary>The tags and name the next Apply would write, so the grid can show the new values.</summary>
+    public Mp3TagEdit? Edit => Record.Status is Mp3Status.Updatable or Mp3Status.Repairable ? Record.Edit : null;
 
-    public string? Album => AlbumPending ? $"→ {Record.ContainingDirectoryName}" : Record.Album;
+    public string? Album => Edit?.Album is { } album ? $"→ {album}" : Record.Album;
 
-    public string? Artist => Record.Artist;
+    public string? Artist => Edit?.Artist is { } artist ? $"→ {artist}" : Record.Artist;
 
-    public string? Title => Record.Title;
+    public string? Title => Edit?.Title is { } title ? $"→ {title}" : Record.Title;
 
     public TimeSpan Duration => Record.Duration;
 
@@ -53,9 +53,8 @@ public sealed class FileRow(Mp3TagRecord record, string rootDirectory)
 
     public bool IsProblem => Record.Status is Mp3Status.Error or Mp3Status.Warning;
 
+    /// <summary>True if the path, a tag, or a value the next Apply would write contains <paramref name="text"/>.</summary>
     public bool Matches(string text) =>
-        RelativePath.Contains(text, StringComparison.CurrentCultureIgnoreCase) ||
-        (Title?.Contains(text, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
-        (Artist?.Contains(text, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
-        (Record.Album?.Contains(text, StringComparison.CurrentCultureIgnoreCase) ?? false);
+        new[] { RelativePath, Record.Title, Record.Artist, Record.Album, Edit?.Title, Edit?.Artist, Edit?.Album, Edit?.FileName }
+            .Any(value => value?.Contains(text, StringComparison.CurrentCultureIgnoreCase) ?? false);
 }

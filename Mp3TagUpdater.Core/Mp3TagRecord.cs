@@ -18,11 +18,35 @@ public static class Mp3Status
     /// <summary>Was unreadable, and has been repaired on disk.</summary>
     public const string Repaired = "Repaired";
 
-    /// <summary>Readable and missing its Album tag, which --apply would fill in.</summary>
+    /// <summary>Readable, and --apply would change its tags or its name.</summary>
     public const string Updatable = "Updatable";
 
-    /// <summary>Was missing its Album tag, which has been filled in on disk.</summary>
+    /// <summary>Its tags or its name have been changed on disk.</summary>
     public const string Updated = "Updated";
+}
+
+/// <summary>New values for a file's tags and name. A null value is left as it is.</summary>
+public sealed record Mp3TagEdit
+{
+    public string? Title { get; init; }
+    public string? Artist { get; init; }
+    public string? Album { get; init; }
+    public string? AlbumArtist { get; init; }
+
+    /// <summary>The new file name, extension included.</summary>
+    public string? FileName { get; init; }
+
+    /// <summary>Misencoded letters are corrected in a tag or the file name.</summary>
+    public bool FixesLetters { get; init; }
+
+    /// <summary>The artist is moved out of the title.</summary>
+    public bool SplitsTitle { get; init; }
+
+    /// <summary>A missing Album is filled in from the folder name.</summary>
+    public bool FillsAlbum { get; init; }
+
+    /// <summary>True if any tag is to be written.</summary>
+    public bool ChangesTags => Title is not null || Artist is not null || Album is not null || AlbumArtist is not null;
 }
 
 /// <summary>
@@ -72,15 +96,11 @@ public record Mp3TagRecord
     /// <summary>Changes made to the file, or that --apply would make.</summary>
     public IReadOnlyList<string> Changes { get; init; } = [];
 
+    /// <summary>The tags and name that were written, or that --apply would write.</summary>
+    public Mp3TagEdit? Edit { get; init; }
+
     /// <summary>True if the Album tag was empty/missing when the file was first read.</summary>
     public bool AlbumWasMissing => string.IsNullOrWhiteSpace(Album);
-
-    /// <summary>
-    /// Returns a copy of this record with the Album value updated.
-    /// Used after the tag has been written back to the file, so the
-    /// in-memory list stays consistent with what's on disk.
-    /// </summary>
-    public Mp3TagRecord WithAlbum(string album) => this with { Album = album };
 
     public override string ToString() =>
         $"{FileName,-40} | Artist: {Artist ?? "(none)",-20} | Album: {Album ?? "(none)",-25} | Title: {Title ?? "(none)"}";

@@ -5,7 +5,8 @@ namespace Mp3TagUpdater.Services;
 /// <summary>
 /// Handles scanning a directory for mp3 files, reading their tags into
 /// Mp3TagRecord instances, repairing files that can't be read, and updating
-/// the Album tag from the folder name when it is missing.
+/// tags and file names: the Album from the folder name when it is missing,
+/// misencoded letters, and the artist held in the title.
 /// </summary>
 /// <param name="onMessage">
 /// Receives a line for each proposed or actual change and each failed write.
@@ -15,15 +16,16 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
 {
     /// <summary>
     /// Reads every mp3 in <see cref="Mp3RunOptions.Directory"/>, repairs unreadable
-    /// files and fills in missing albums. Repairs come first so that a repaired file
-    /// can also get an album. A cancelled run stops before the next file, and the
+    /// files, and then updates tags and names: misencoded letters, artist in the title and
+    /// missing albums, as the options ask. Repairs come first so that a repaired file can
+    /// also be updated. A cancelled run stops before the next file, and the
     /// files it didn't reach keep the record they had at that point.
     /// </summary>
     public Mp3RunResult Run(Mp3RunOptions options, IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default)
     {
         var records = ReadTags(options.Directory, options.Recursive, progress, cancellation);
         records = RepairUnreadableFiles(records, options.DryRun, progress, cancellation);
-        records = UpdateMissingAlbumTags(records, options.DryRun, progress, cancellation);
+        records = UpdateTags(records, options, progress, cancellation);
         return new Mp3RunResult(records, cancellation.IsCancellationRequested);
     }
 
@@ -122,13 +124,17 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
     }
 
     /// <summary>
-    /// Sets a missing Album tag to the name of the folder containing the file.
-    /// Files that are unreadable or flagged with a warning are skipped, so that
-    /// tags are never rewritten on a file that may be damaged or not really an mp3.
+    /// Works out each file's new tags and name (see <see cref="PlanEdits"/>) and writes them.
+    /// Files that are unreadable or flagged with a warning are skipped, so that tags are never
+    /// rewritten on a file that may be damaged or not really an mp3.
     /// </summary>
-    public List<Mp3TagRecord> UpdateMissingAlbumTags(List<Mp3TagRecord> records, bool dryRun = true,
-        IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default) =>
-        Process(records, "Filling in albums", CanUpdateAlbum, r => UpdateAlbum(r, dryRun), progress, cancellation);
+    public List<Mp3TagRecord> UpdateTags(List<Mp3TagRecord> records, Mp3RunOptions options,
+        IProgress<Mp3Progress>? progress = null, CancellationToken cancellation = default)
+    {
+        var plans = PlanEdits(records, options);
+        return Process(records, "Updating tags", r => plans.ContainsKey(r.FilePath),
+            r => ApplyEdit(r, plans[r.FilePath], options.DryRun), progress, cancellation);
+    }
 
     /// <summary>
     /// Applies <paramref name="change"/> to each record it is meant for, in order.
@@ -157,56 +163,200 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
         return result;
     }
 
-    private static bool CanUpdateAlbum(Mp3TagRecord record) =>
-        record.AlbumWasMissing &&
+    private static bool CanEdit(Mp3TagRecord record) =>
         record.Status is Mp3Status.Ok or Mp3Status.Repairable or Mp3Status.Repaired;
 
-    private Mp3TagRecord UpdateAlbum(Mp3TagRecord record, bool dryRun)
+    /// <summary>
+    /// Works out the new tags and name of every file that needs them, keyed by path:
+    /// <list type="number">
+    /// <item>With <see cref="Mp3RunOptions.FixLetters"/>, misencoded letters in Title, Artist, Album
+    /// and Album Artist are corrected, using the file name to recover lost letters.</item>
+    /// <item>With <see cref="Mp3RunOptions.SplitTitles"/>, a title such as "Artist / Title" is split
+    /// into Artist and Title. The order is decided per folder unless the mode fixes it.</item>
+    /// <item>A missing Album is set to the folder name.</item>
+    /// <item>With <see cref="Mp3RunOptions.FixLetters"/>, misencoded letters in the file name are
+    /// corrected, trusting the corrected tags where they spell a word differently.</item>
+    /// </list>
+    /// </summary>
+    public static Dictionary<string, (Mp3TagEdit Edit, IReadOnlyList<string> Changes, IReadOnlyList<string> Warnings)> PlanEdits(
+        IReadOnlyList<Mp3TagRecord> records, Mp3RunOptions options)
     {
-        var album = record.ContainingDirectoryName;
-        IReadOnlyList<string> changes = [.. record.Changes, $"Set Album to \"{album}\""];
+        var editable = records.Where(CanEdit).ToList();
+
+        // Step 1: letters. Every later step works on the corrected text.
+        var texts = editable.ToDictionary(r => r.FilePath, r =>
+        {
+            var reference = Path.GetFileNameWithoutExtension(r.FileName);
+            var warnings = new List<string>();
+            var fixedAny = false;
+
+            string? FixTag(string field, string? value, string? reference)
+            {
+                if (!options.FixLetters || MisencodedText.Fix(value, [reference]) is not { } fix)
+                    return value;
+                fixedAny = true;
+                if (fix.Unresolved > 0)
+                    warnings.Add($"{field}: couldn't tell which letter \"Ã \" stands for in \"{value}\"");
+                return fix.Text;
+            }
+
+            var title = FixTag("Title", r.Title, reference);
+            var artist = FixTag("Artist", r.Artist, reference);
+            var album = FixTag("Album", r.Album, r.ContainingDirectoryName);
+            var albumArtist = FixTag("Album Artist", r.AlbumArtist, null);
+            return (Title: title, Artist: artist, Album: album, AlbumArtist: albumArtist, Fixed: fixedAny, Warnings: warnings);
+        });
+
+        // Step 2: which way round each folder's "a / b" titles are.
+        var artistFirst = options.SplitTitles == TitleSplitMode.Auto
+            ? ArtistTitleSplit.ArtistFirstByFolder(editable.Select(r =>
+                (Path.GetDirectoryName(r.FilePath) ?? "", texts[r.FilePath].Artist, texts[r.FilePath].Title)))
+            : [];
+
+        var plans = new Dictionary<string, (Mp3TagEdit, IReadOnlyList<string>, IReadOnlyList<string>)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var record in editable)
+        {
+            var text = texts[record.FilePath];
+            var (title, artist) = (text.Title, text.Artist);
+            var split = false;
+
+            if (options.SplitTitles != TitleSplitMode.Off && ArtistTitleSplit.Split(title) is { } halves)
+            {
+                var first = options.SplitTitles switch
+                {
+                    TitleSplitMode.ArtistFirst => true,
+                    TitleSplitMode.TitleFirst => false,
+                    _ => artistFirst.GetValueOrDefault(Path.GetDirectoryName(record.FilePath) ?? "", true)
+                };
+                (artist, title) = ArtistTitleSplit.Assign(halves, first);
+                split = true;
+            }
+
+            var album = text.Album;
+            var fillsAlbum = record.AlbumWasMissing;
+            if (fillsAlbum)
+                album = record.ContainingDirectoryName;
+
+            // Step 4: the file name, checked against the corrected title and artist.
+            string? fileName = null;
+            var stem = Path.GetFileNameWithoutExtension(record.FileName);
+            if (options.FixLetters && MisencodedText.Fix(stem, [title, artist, album], trustReferences: true) is { } nameFix)
+            {
+                fileName = nameFix.Text + Path.GetExtension(record.FileName);
+                if (nameFix.Unresolved > 0)
+                    text.Warnings.Add($"File name: couldn't tell which letter \"Ã \" stands for in \"{record.FileName}\"");
+            }
+
+            var edit = new Mp3TagEdit
+            {
+                Title = Changed(record.Title, title),
+                Artist = Changed(record.Artist, artist),
+                Album = Changed(record.Album, album),
+                AlbumArtist = Changed(record.AlbumArtist, text.AlbumArtist),
+                FileName = fileName,
+                FixesLetters = text.Fixed || fileName is not null,
+                SplitsTitle = split,
+                FillsAlbum = fillsAlbum
+            };
+
+            if (!edit.ChangesTags && edit.FileName is null)
+            {
+                if (text.Warnings.Count > 0)
+                    plans[record.FilePath] = (edit, [], text.Warnings);
+                continue;
+            }
+
+            var changes = new List<string>();
+            if (edit.Title is not null)
+                changes.Add($"Title \"{record.Title}\" → \"{edit.Title}\"");
+            if (edit.Artist is not null)
+                changes.Add(record.Artist is null ? $"Set Artist to \"{edit.Artist}\"" : $"Artist \"{record.Artist}\" → \"{edit.Artist}\"");
+            if (edit.Album is not null)
+                changes.Add(fillsAlbum ? $"Set Album to \"{edit.Album}\"" : $"Album \"{record.Album}\" → \"{edit.Album}\"");
+            if (edit.AlbumArtist is not null)
+                changes.Add($"Album Artist \"{record.AlbumArtist}\" → \"{edit.AlbumArtist}\"");
+            if (edit.FileName is not null)
+                changes.Add($"Rename to \"{edit.FileName}\"");
+
+            plans[record.FilePath] = (edit, changes, text.Warnings);
+        }
+
+        return plans;
+
+        static string? Changed(string? before, string? after) =>
+            after is not null && !string.Equals(before, after, StringComparison.Ordinal) ? after : null;
+    }
+
+    private Mp3TagRecord ApplyEdit(Mp3TagRecord record,
+        (Mp3TagEdit Edit, IReadOnlyList<string> Changes, IReadOnlyList<string> Warnings) plan, bool dryRun)
+    {
+        var (edit, newChanges, warnings) = plan;
+        IReadOnlyList<string> errors = [.. record.Errors, .. warnings];
+        if (newChanges.Count == 0)
+            return record with { Errors = errors };
+
+        IReadOnlyList<string> changes = [.. record.Changes, .. newChanges];
+        var summary = string.Join("; ", newChanges);
 
         if (dryRun)
         {
-            Report(Mp3MessageKind.Change, $"[DRY RUN] Would set Album to \"{album}\": {record.FileName}");
+            Report(Mp3MessageKind.Change, $"[DRY RUN] Would change {record.FileName}: {summary}");
             return record with
             {
                 Status = record.Status == Mp3Status.Ok ? Mp3Status.Updatable : record.Status,
-                Changes = changes
+                Errors = errors,
+                Changes = changes,
+                Edit = edit
             };
         }
 
         try
         {
-            WriteAlbumTag(record.FilePath, album);
-            Report(Mp3MessageKind.Change, $"Set Album to \"{album}\": {record.FileName}");
+            var path = record.FilePath;
+            if (edit.ChangesTags)
+                WriteTags(path, edit);
+            if (edit.FileName is not null)
+                path = Rename(path, edit.FileName);
 
-            return ReadSingleFile(record.FilePath) with
+            Report(Mp3MessageKind.Change, $"Changed {record.FileName}: {summary}");
+
+            return ReadSingleFile(path) with
             {
                 Status = record.Status == Mp3Status.Repaired ? Mp3Status.Repaired : Mp3Status.Updated,
-                Errors = record.Errors,
-                Changes = changes
+                Errors = errors,
+                Changes = changes,
+                Edit = edit
             };
         }
         catch (Exception ex)
         {
-            Report(Mp3MessageKind.Error, $"Failed to set Album on '{record.FilePath}': {ex.Message}");
+            Report(Mp3MessageKind.Error, $"Failed to update '{record.FilePath}': {ex.Message}");
             return record with
             {
                 Status = Mp3Status.Error,
-                Errors = [.. record.Errors, $"Album update failed: {ex.Message}"]
+                Errors = [.. errors, $"Update failed: {ex.Message}"]
             };
         }
+    }
+
+    /// <summary>Renames the file within its folder, and returns the new path. An existing file is never replaced.</summary>
+    private static string Rename(string filePath, string fileName)
+    {
+        var target = Path.Combine(Path.GetDirectoryName(filePath)!, fileName);
+        if (File.Exists(target) && !string.Equals(Path.GetFullPath(target), Path.GetFullPath(filePath), StringComparison.OrdinalIgnoreCase))
+            throw new IOException($"Can't rename to \"{fileName}\": a file with that name already exists.");
+        File.Move(filePath, target);
+        return target;
     }
 
     private void Report(Mp3MessageKind kind, string text) => onMessage?.Invoke(new Mp3Message(kind, text));
 
     /// <summary>
-    /// Writes the tag to a temporary copy and then swaps it in, so a failed save
+    /// Writes the tags to a temporary copy and then swaps it in, so a failed save
     /// can't damage the original. The modified time is kept because the audio
     /// hasn't changed.
     /// </summary>
-    private static void WriteAlbumTag(string filePath, string album)
+    private static void WriteTags(string filePath, Mp3TagEdit edit)
     {
         var modified = File.GetLastWriteTimeUtc(filePath);
         var tempPath = filePath + ".tmp";
@@ -218,7 +368,14 @@ public class Mp3Library(Action<Mp3Message>? onMessage = null)
             // The .tmp extension means TagLib has to be told the file type.
             using (var file = TagLib.File.Create(tempPath, "audio/mpeg", TagLib.ReadStyle.Average))
             {
-                file.Tag.Album = album;
+                if (edit.Title is not null)
+                    file.Tag.Title = edit.Title;
+                if (edit.Artist is not null)
+                    file.Tag.Performers = [edit.Artist];
+                if (edit.Album is not null)
+                    file.Tag.Album = edit.Album;
+                if (edit.AlbumArtist is not null)
+                    file.Tag.AlbumArtists = [edit.AlbumArtist];
                 file.Save();
             }
 

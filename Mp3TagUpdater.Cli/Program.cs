@@ -5,12 +5,20 @@ namespace Mp3TagUpdater.Cli;
 
 public static class Program
 {
-    private static readonly string[] KnownOptions = ["--apply", "--dry-run", "--no-recursive", "--no-log"];
+    private static readonly string[] KnownOptions =
+    [
+        "--apply", "--dry-run", "--no-recursive", "--no-log", "--fix-letters",
+        "--split-titles", "--split-titles=auto", "--split-titles=artist-first", "--split-titles=title-first"
+    ];
 
     public static int Main(string[] args)
     {
+        // Tags and file names hold letters such as æøå, which the console code page may lack.
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+
         // --- Parse arguments -------------------------------------------------
         // Usage: Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
+        //                      [--fix-letters] [--split-titles[=auto|artist-first|title-first]]
         //
         // Dry-run is the DEFAULT behavior: no mp3 files are modified unless
         // --apply is explicitly passed. --dry-run is also accepted for
@@ -42,6 +50,14 @@ public static class Program
         bool dryRun = !args.Contains("--apply");
         bool recursive = !args.Contains("--no-recursive");
         bool writeLog = !args.Contains("--no-log");
+        bool fixLetters = args.Contains("--fix-letters");
+        var splitTitles = args.LastOrDefault(a => a.StartsWith("--split-titles")) switch
+        {
+            null => TitleSplitMode.Off,
+            "--split-titles=artist-first" => TitleSplitMode.ArtistFirst,
+            "--split-titles=title-first" => TitleSplitMode.TitleFirst,
+            _ => TitleSplitMode.Auto
+        };
 
         if (!Directory.Exists(directory))
         {
@@ -62,7 +78,14 @@ public static class Program
         };
 
         // --- Read every mp3, repair unreadable files, fill in missing albums --
-        var result = library.Run(new Mp3RunOptions(directory) { DryRun = dryRun, Recursive = recursive }, cancellation: cancellation.Token);
+        var options = new Mp3RunOptions(directory)
+        {
+            DryRun = dryRun,
+            Recursive = recursive,
+            FixLetters = fixLetters,
+            SplitTitles = splitTitles
+        };
+        var result = library.Run(options, cancellation: cancellation.Token);
         var records = result.Records;
 
         if (records.Count == 0)
@@ -108,7 +131,8 @@ public static class Program
     private static void PrintUsage()
     {
         Console.WriteLine("Reads mp3 tags from a directory, repairs tag faults that make files");
-        Console.WriteLine("unreadable, and fills in missing Album tags from the folder name.");
+        Console.WriteLine("unreadable, and fills in missing Album tags from the folder name. It can");
+        Console.WriteLine("also correct misencoded letters and move the artist out of the title.");
         Console.WriteLine("The console lists changes only. Every file's details, tags and errors");
         Console.WriteLine("go in a CSV log.");
         Console.WriteLine();
@@ -117,11 +141,16 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]");
+        Console.WriteLine("                [--fix-letters] [--split-titles[=auto|artist-first|title-first]]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --apply          Write changes to disk (omit this to preview only)");
         Console.WriteLine("  --no-recursive   Only scan the top-level directory, not subfolders");
         Console.WriteLine("  --no-log         Don't write mp3-log-YYYYMMDD-HHMMSS.csv to <directory>");
+        Console.WriteLine("  --fix-letters    Correct letters such as \"Ã¸\" to \"ø\" in tags and file names");
+        Console.WriteLine("  --split-titles   Split titles like \"Artist / Title\" into Artist and Title.");
+        Console.WriteLine("                   The order is worked out per folder, or set it with");
+        Console.WriteLine("                   =artist-first or =title-first");
         Console.WriteLine("  -h, --help       Show this help message");
     }
 }

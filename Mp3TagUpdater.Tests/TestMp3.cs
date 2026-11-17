@@ -8,7 +8,7 @@ internal static class TestMp3
     private const int FrameSize = 417;
     private const int FrameCount = 100; // about 2.6 seconds
 
-    public static string Create(string path, string? album = null)
+    public static string Create(string path, string? album = null, string title = "Test Title", string? artist = "Test Artist")
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
@@ -19,8 +19,8 @@ internal static class TestMp3
 
         using (var file = TagLib.File.Create(path))
         {
-            file.Tag.Title = "Test Title";
-            file.Tag.Performers = ["Test Artist"];
+            file.Tag.Title = title;
+            file.Tag.Performers = artist is null ? [] : [artist];
             if (album is not null)
                 file.Tag.Album = album;
             file.Save();

@@ -157,6 +157,72 @@ public sealed class Mp3LibraryTests : IDisposable
         Assert.Contains("\"song, with comma.mp3\"", lines[1]);
     }
 
+    [Fact]
+    public void Letters_and_artist_are_fixed_only_when_asked()
+    {
+        TestMp3.Create(Path.Combine(_root, "Hits", "01 Tøsedrengene - Indianer.mp3"), album: "Hits",
+            title: "TÃ¸sedrengene / Indianer", artist: "Various");
+
+        var plain = Assert.Single(new Mp3Library().Run(new Mp3RunOptions(_root)).Records);
+        Assert.Equal(Mp3Status.Ok, plain.Status);
+        Assert.Empty(plain.Changes);
+
+        var options = new Mp3RunOptions(_root) { FixLetters = true, SplitTitles = TitleSplitMode.ArtistFirst };
+        var dryRun = Assert.Single(new Mp3Library().Run(options).Records);
+        Assert.Equal(Mp3Status.Updatable, dryRun.Status);
+        Assert.Equal("Indianer", dryRun.Edit?.Title);
+        Assert.Equal("Tøsedrengene", dryRun.Edit?.Artist);
+        Assert.True(dryRun.Edit is { FixesLetters: true, SplitsTitle: true, FillsAlbum: false, FileName: null });
+    }
+
+    [Fact]
+    public void Apply_writes_fixed_tags_renames_and_keeps_modified_time()
+    {
+        var path = TestMp3.Create(Path.Combine(_root, "Disney", "06 VÃœr vor gÃœst.mp3"), album: "Disney",
+            title: "VÃ¦r vor gÃ¦st", artist: "Various");
+        var modified = new DateTime(2020, 5, 17, 12, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(path, modified);
+
+        var result = new Mp3Library().Run(new Mp3RunOptions(_root) { DryRun = false, FixLetters = true });
+
+        var record = Assert.Single(result.Records);
+        Assert.Equal(Mp3Status.Updated, record.Status);
+        Assert.Equal("06 Vær vor gæst.mp3", record.FileName);
+        Assert.Equal("Vær vor gæst", record.Title);
+        Assert.False(File.Exists(path));
+        Assert.Equal(modified, File.GetLastWriteTimeUtc(record.FilePath));
+
+        using var file = TagLib.File.Create(record.FilePath);
+        Assert.Equal("Vær vor gæst", file.Tag.Title);
+    }
+
+    [Fact]
+    public void Rename_never_replaces_an_existing_file()
+    {
+        TestMp3.Create(Path.Combine(_root, "Hits", "BÃ¥d.mp3"), album: "Hits", title: "Båd");
+        TestMp3.Create(Path.Combine(_root, "Hits", "Båd.mp3"), album: "Hits", title: "Båd");
+
+        var result = new Mp3Library().Run(new Mp3RunOptions(_root) { DryRun = false, FixLetters = true });
+
+        var failed = Assert.Single(result.Records, r => r.Status == Mp3Status.Error);
+        Assert.Contains(failed.Errors, e => e.Contains("already exists"));
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(_root, "Hits"), "*.mp3").Length);
+    }
+
+    [Fact]
+    public void Split_order_is_worked_out_per_folder()
+    {
+        TestMp3.Create(Path.Combine(_root, "A", "1.mp3"), album: "A", title: "Song One / Thomas Helmig", artist: "Various");
+        TestMp3.Create(Path.Combine(_root, "A", "2.mp3"), album: "A", title: "Song Two / Thomas Helmig", artist: "Various");
+        TestMp3.Create(Path.Combine(_root, "B", "1.mp3"), album: "B", title: "Duran Duran / Ordinary World", artist: "Various");
+        TestMp3.Create(Path.Combine(_root, "B", "2.mp3"), album: "B", title: "Duran Duran / Come Undone", artist: "Various");
+
+        var records = new Mp3Library().Run(new Mp3RunOptions(_root) { SplitTitles = TitleSplitMode.Auto }).Records;
+
+        Assert.All(records.Where(r => r.ContainingDirectoryName == "A"), r => Assert.Equal("Thomas Helmig", r.Edit?.Artist));
+        Assert.All(records.Where(r => r.ContainingDirectoryName == "B"), r => Assert.Equal("Duran Duran", r.Edit?.Artist));
+    }
+
     private sealed class ListProgress(List<Mp3Progress> reports) : IProgress<Mp3Progress>
     {
         public void Report(Mp3Progress value) => reports.Add(value);
