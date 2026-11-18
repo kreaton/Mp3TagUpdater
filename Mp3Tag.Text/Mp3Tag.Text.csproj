@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Repairs of garbled letters (mojibake), shared by Mp3TagUpdater and Mp3TagFromApi. No dependencies. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Mp3Tag.Text</RootNamespace>
+  </PropertyGroup>
+
+</Project>

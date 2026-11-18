@@ -1,0 +1,212 @@
+<Window x:Class="Mp3TagFromApi.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mp3 Tag From Api"
+        Icon="app.ico"
+        Width="1180" Height="720" MinWidth="760" MinHeight="460"
+        WindowStartupLocation="CenterScreen"
+        AllowDrop="True" PreviewDragOver="OnDragOver" PreviewDrop="OnDrop"
+        Closing="OnClosing">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Folder -->
+        <Label Grid.Row="0" Content="_Folder" Target="{Binding ElementName=FolderBox}" VerticalAlignment="Center" Margin="0,0,12,8" />
+        <TextBox x:Name="FolderBox" Grid.Row="0" Grid.Column="1" Margin="0,0,8,8" TextChanged="OnFolderTextChanged"
+                 ToolTip="One folder of mp3 files: one album. Subfolders are not read. You can also drop a folder on the window." />
+        <Button Grid.Row="0" Grid.Column="2" Content="Browse..." Margin="0,0,0,8" Click="OnBrowse" />
+
+        <!-- Source and search -->
+        <Label Grid.Row="1" Content="_Search" Target="{Binding ElementName=SearchBox}" VerticalAlignment="Center" Margin="0,0,12,8" />
+        <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,0,8,8">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                <RadioButton x:Name="SpotifyRadio" Content="Spotify" GroupName="Source" IsChecked="True" Checked="OnSourceChanged" MinWidth="0" />
+                <RadioButton x:Name="DiscogsRadio" Content="Discogs" GroupName="Source" Margin="16,0,0,0" Checked="OnSourceChanged" MinWidth="0" />
+            </StackPanel>
+            <TextBox x:Name="SearchBox" VerticalAlignment="Center"
+                     ToolTip="Search text (the folder name to begin with), or paste an album URL from Spotify or a release URL from Discogs." />
+        </DockPanel>
+        <Button x:Name="SearchButton" Grid.Row="1" Grid.Column="2" Content="Search" Margin="0,0,0,8" IsDefault="True"
+                HorizontalAlignment="Stretch" Style="{StaticResource AccentButtonStyle}" Click="OnSearch" />
+
+        <!-- Album -->
+        <Label Grid.Row="2" Content="_Album" Target="{Binding ElementName=HitBox}" VerticalAlignment="Center" Margin="0,0,12,8" />
+        <ComboBox x:Name="HitBox" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,8" IsEnabled="False"
+                  SelectionChanged="OnHitChanged" MaxDropDownHeight="480"
+                  ToolTip="The albums the search found. The first one is chosen; pick another to compare.">
+            <ComboBox.ItemTemplate>
+                <DataTemplate>
+                    <!-- How the album fits the folder (tracks and playing time) on the right; dimmed when the track count differs. -->
+                    <DockPanel Opacity="{Binding Opacity}">
+                        <TextBlock x:Name="FitLabel" DockPanel.Dock="Right" Text="{Binding FitText}" Margin="16,0,0,0" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <TextBlock TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding Hit.Artist, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" – " /><Run Text="{Binding Hit.Title, Mode=OneWay}" FontWeight="SemiBold" />
+                            <Run Text="{Binding Details, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </TextBlock>
+                    </DockPanel>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Tone}" Value="Success">
+                            <Setter TargetName="FitLabel" Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Tone}" Value="Caution">
+                            <Setter TargetName="FitLabel" Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2">
+            <!-- How many of the search results fit the folder, so the right one is easy to find in the list. -->
+            <TextBlock x:Name="FitSummaryText" Margin="0,0,0,8" TextWrapping="Wrap" Visibility="Collapsed" />
+            <!-- Shown when the search returned as many albums as the source gives: the right one may be missing. -->
+            <DockPanel x:Name="MoreHitsPanel" Margin="0,0,0,8" Visibility="Collapsed">
+                <TextBlock DockPanel.Dock="Left" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE7BA;" Margin="0,2,8,0"
+                           Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                <TextBlock x:Name="MoreHitsText" TextWrapping="Wrap" />
+            </DockPanel>
+            <TextBlock x:Name="AlbumText" Margin="0,0,0,8" TextWrapping="Wrap" Visibility="Collapsed">
+                <Run x:Name="AlbumDetailsRun" />
+                <Hyperlink x:Name="AlbumLink" RequestNavigate="OnAlbumLink"><Run x:Name="AlbumLinkRun" /></Hyperlink>
+                <Run x:Name="AttributionRun" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Options and actions -->
+        <DockPanel Grid.Row="4" Grid.ColumnSpan="3" Margin="0,4,0,12">
+            <Button x:Name="SettingsButton" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnSettings"
+                    ToolTip="Settings: API keys, version and updates" AutomationProperties.Name="Settings">
+                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE713;" />
+            </Button>
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="ScanButton" Content="Scan" MinWidth="96" Click="OnScan"
+                        ToolTip="Reads the folder's mp3 files again, for example after changing them in another program. A folder you choose or drop is read at once." />
+                <Button x:Name="ApplyButton" Content="Apply changes..." MinWidth="140" Margin="8,0,0,0" IsEnabled="False" Style="{StaticResource AccentButtonStyle}" Click="OnApply"
+                        ToolTip="Writes the tags and file names shown with an arrow. Modified dates are kept." />
+                <Button x:Name="CancelButton" Content="Cancel" MinWidth="96" Margin="8,0,0,0" IsEnabled="False" Click="OnCancel" />
+                <CheckBox x:Name="FixLettersBox" Content="Fix mojibake" Margin="24,0,0,0" VerticalAlignment="Center"
+                          Checked="OnFixLettersChanged" Unchecked="OnFixLettersChanged"
+                          ToolTip="Corrects letters shown as two characters, such as &quot;Ã¸&quot; for &quot;ø&quot;, in the tags and file names. With an album it fixes what the album doesn't replace (the genre); without one, it is the only change." />
+                <CheckBox x:Name="JsonBox" Content="Save album JSON" IsChecked="True" Margin="24,0,0,0" VerticalAlignment="Center"
+                          ToolTip="Saves what the source says about the album, and which file is which track, as &quot;&lt;album&gt;.json&quot; in the folder." />
+            </StackPanel>
+        </DockPanel>
+
+        <ProgressBar x:Name="Bar" Grid.Row="5" Grid.ColumnSpan="3" Height="8" Margin="0,0,0,8" />
+
+        <TextBlock x:Name="StatusText" Grid.Row="6" Grid.ColumnSpan="3" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Text="Choose a folder of mp3 files, then search Spotify or Discogs for its album. Nothing is changed until you apply." />
+
+        <DockPanel Grid.Row="7" Grid.ColumnSpan="3" Margin="0,0,0,8">
+            <Label Content="Sho_w" Target="{Binding ElementName=FilterBox}" VerticalAlignment="Center" Margin="0,0,12,0" />
+            <ComboBox x:Name="FilterBox" MinWidth="220" SelectedIndex="0" VerticalAlignment="Center" SelectionChanged="OnFilterChanged">
+                <ComboBoxItem x:Name="FilterAll" Content="All files" />
+                <ComboBoxItem x:Name="FilterChanges" Content="Changes" />
+                <ComboBoxItem x:Name="FilterProblems" Content="Errors" />
+            </ComboBox>
+            <TextBox x:Name="FindBox" DockPanel.Dock="Right" Width="240" VerticalAlignment="Center" TextChanged="OnFilterChanged"
+                     ToolTip="Show only files whose name, title, artist or album contains this text"
+                     AutomationProperties.Name="Find" />
+            <TextBlock Text="Find" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,0,12,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="CountText" VerticalAlignment="Center" Margin="16,0,0,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </DockPanel>
+
+        <DataGrid x:Name="FileGrid" Grid.Row="8" Grid.ColumnSpan="3"
+                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                  SelectionMode="Extended" HeadersVisibility="Column" GridLinesVisibility="None"
+                  EnableRowVirtualization="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                  MouseDoubleClick="OnRowDoubleClick" ContextMenuOpening="OnGridContextMenuOpening" PreviewKeyDown="OnGridKeyDown">
+            <DataGrid.Resources>
+                <Style x:Key="CellText" TargetType="TextBlock">
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                    <Setter Property="Margin" Value="0,0,12,0" />
+                </Style>
+            </DataGrid.Resources>
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Open" FontWeight="SemiBold" Click="OnOpenSelected" InputGestureText="Double-click" />
+                    <MenuItem x:Name="EditTagsItem" Header="Edit tags..." Click="OnEditTags" InputGestureText="F2" />
+                    <MenuItem x:Name="UndoEditsItem" Header="Undo edits by hand" Click="OnUndoHandEdits" />
+                    <Separator />
+                    <MenuItem Header="Show in Explorer" Click="OnShowInExplorer" />
+                    <MenuItem Header="Copy path" Click="OnCopyPath" />
+                    <Separator />
+                    <MenuItem Header="Open the folder in Explorer" Click="OnOpenFolder" />
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Status" SortMemberPath="Status" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock x:Name="StatusLabel" Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding Tone}" Value="Critical">
+                                    <Setter TargetName="StatusLabel" Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Tone}" Value="Caution">
+                                    <Setter TargetName="StatusLabel" Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Tone}" Value="Pending">
+                                    <Setter TargetName="StatusLabel" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Tone}" Value="Success">
+                                    <Setter TargetName="StatusLabel" Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Tone}" Value="Neutral">
+                                    <Setter TargetName="StatusLabel" Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                </DataTrigger>
+                                <!-- On the accent-coloured selection the status colours are hard to read. -->
+                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                                    <Setter TargetName="StatusLabel" Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- The same order as Mp3TagUpdater's list. -->
+                <DataGridTemplateColumn Header="File" SortMemberPath="FileName" Width="2*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding FileName}" ToolTip="{Binding FileNameTooltip}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Album" Binding="{Binding Album}" Width="*" ElementStyle="{StaticResource CellText}" />
+                <DataGridTextColumn Header="#" Binding="{Binding Number}" SortMemberPath="NumberOrder" Width="Auto" ElementStyle="{StaticResource CellText}" />
+                <DataGridTextColumn Header="Artist" Binding="{Binding Artist}" Width="*" ElementStyle="{StaticResource CellText}" />
+                <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*" ElementStyle="{StaticResource CellText}" />
+                <DataGridTextColumn Binding="{Binding Length}" SortMemberPath="Duration" Width="Auto" ElementStyle="{StaticResource CellText}">
+                    <DataGridTextColumn.Header>
+                        <TextBlock Text="Length" ToolTip="The file's playing time, measured from its audio. It is never changed." />
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTemplateColumn Header="Changes and errors" SortMemberPath="Details" Width="2*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Details}" ToolTip="{Binding DetailsTooltip}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Window>

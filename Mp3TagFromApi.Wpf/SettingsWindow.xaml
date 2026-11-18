@@ -1,0 +1,77 @@
+<Window x:Class="Mp3TagFromApi.Wpf.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mp3TagFromApi settings"
+        Icon="app.ico"
+        Width="640" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <StackPanel Margin="24,20,24,20">
+        <!-- About and updates -->
+        <DockPanel>
+            <Image x:Name="AppIcon" DockPanel.Dock="Left" Width="56" Height="56" VerticalAlignment="Top"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
+            <Button x:Name="UpdateButton" DockPanel.Dock="Right" Content="Check for updates" VerticalAlignment="Center"
+                    Click="OnCheckForUpdates" />
+            <StackPanel Margin="16,0,16,0" VerticalAlignment="Center">
+                <TextBlock Text="Mp3TagFromApi" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock x:Name="VersionText" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap">
+                    <Run Text="© 2026 Per Hejndorf ·" />
+                    <Hyperlink NavigateUri="https://github.com/kreaton/Mp3TagUpdater/blob/main/LICENSE" RequestNavigate="OnLink">MIT License</Hyperlink>
+                    <Run Text="· Built with TagLibSharp (LGPL-2.1) and Velopack" />
+                </TextBlock>
+            </StackPanel>
+        </DockPanel>
+
+        <Separator Margin="0,18,0,14" />
+
+        <TextBlock Text="API keys" FontWeight="SemiBold" FontSize="18" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Text="Saved encrypted for your Windows user in %APPDATA%\Mp3TagFromApi." />
+
+        <TextBlock Text="Spotify" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+            Create an app on the
+            <Hyperlink NavigateUri="https://developer.spotify.com/dashboard" RequestNavigate="OnLink">Spotify developer dashboard</Hyperlink>
+            (redirect URI: http://127.0.0.1:8888/callback, it isn't used), then copy its Client ID and Client secret from Settings.
+        </TextBlock>
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Label Content="Client _ID" Target="{Binding ElementName=SpotifyIdBox}" VerticalAlignment="Center" />
+            <TextBox x:Name="SpotifyIdBox" Grid.Column="1" Margin="0,0,0,8" />
+            <Label Grid.Row="1" Content="Client _secret" Target="{Binding ElementName=SpotifySecretBox}" VerticalAlignment="Center" />
+            <PasswordBox x:Name="SpotifySecretBox" Grid.Row="1" Grid.Column="1" />
+        </Grid>
+
+        <TextBlock Text="Discogs" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+            Only needed for searching: a release URL works without. In
+            <Hyperlink NavigateUri="https://www.discogs.com/settings/developers" RequestNavigate="OnLink">Discogs developer settings</Hyperlink>
+            choose Generate new token and copy your personal access token.
+        </TextBlock>
+        <Grid Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Label Content="Personal access _token" Target="{Binding ElementName=DiscogsTokenBox}" VerticalAlignment="Center" />
+            <PasswordBox x:Name="DiscogsTokenBox" Grid.Column="1" />
+        </Grid>
+
+        <DockPanel>
+            <Button DockPanel.Dock="Left" Content="Import keys..." Click="OnImport"
+                    ToolTip="Reads the keys from an appsettings.secret.json, such as the ones of the MusicApiSamples console apps." />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Save" MinWidth="96" IsDefault="True" Style="{StaticResource AccentButtonStyle}" Click="OnSave" />
+                <Button Content="Cancel" MinWidth="96" Margin="8,0,0,0" IsCancel="True" />
+            </StackPanel>
+        </DockPanel>
+    </StackPanel>
+</Window>

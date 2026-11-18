@@ -28,9 +28,14 @@ Used to build, test or render promotional material only; not part of the shipped
 | Asset(s) | Origin | Licence |
 |---|---|---|
 | `Mp3TagUpdater.Wpf/app.ico`, `images/banner.png` | The tile and music note are reused from the author's Mp3Player icon, which the author AI-generated with an image-generation tool. The green update badge, the layout and the banner were drawn in code (Python with Pillow) with Claude Code, under the author's direction. The banner text is set in Segoe UI from the Windows fonts folder and is rendered into the image; no font file is distributed | MIT (as part of this project) |
+| `Mp3TagFromApi.Wpf/app.ico` | The Mp3TagUpdater icon above, with the green update badge replaced by a yellow lightning bolt on a dark blue disc, drawn in code (PowerShell with System.Drawing) with Claude Code, under the author's direction | MIT (as part of this project) |
+
+## Online services (Mp3TagFromApi)
+
+Mp3TagFromApi reads album data from the [Spotify Web API](https://developer.spotify.com/documentation/web-api) and the [Discogs API](https://www.discogs.com/developers), using the user's own keys. No data from either service is stored in this repository. The Spotify and Discogs terms apply to that use. Where Discogs data is shown, the app says "Data provided by Discogs.", as Discogs asks.
 
 The test suite writes its own mp3 files at run time; none are stored in the repository.
 
 ## Trademarks
 
-Microsoft, Windows, .NET and other Microsoft product names are trademarks of the Microsoft group of companies. All other product names, logos and brands mentioned in this repository are the property of their respective owners. They are used only to identify the services and tools this project works with, and their use does not imply endorsement.
+Microsoft, Windows, .NET and other Microsoft product names are trademarks of the Microsoft group of companies. Spotify is a trademark of Spotify AB. Discogs is a trademark of Zink Media, LLC. All other product names, logos and brands mentioned in this repository are the property of their respective owners. They are used only to identify the services and tools this project works with, and their use does not imply endorsement.

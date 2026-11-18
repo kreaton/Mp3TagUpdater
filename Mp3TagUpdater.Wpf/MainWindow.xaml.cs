@@ -7,8 +7,8 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Win32;
-using Mp3TagUpdater.Models;
-using Mp3TagUpdater.Services;
+using Mp3Tag.Core.Models;
+using Mp3Tag.Core;
 
 namespace Mp3TagUpdater.Wpf;
 

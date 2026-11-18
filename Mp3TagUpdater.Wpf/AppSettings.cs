@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Mp3TagUpdater.Services;
+using Mp3Tag.Core;
 
 namespace Mp3TagUpdater.Wpf;
 

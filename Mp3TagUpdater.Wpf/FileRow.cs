@@ -1,5 +1,5 @@
 using System.IO;
-using Mp3TagUpdater.Models;
+using Mp3Tag.Core.Models;
 
 namespace Mp3TagUpdater.Wpf;
 

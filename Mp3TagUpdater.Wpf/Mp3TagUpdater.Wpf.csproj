@@ -20,7 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Mp3TagUpdater.Core\Mp3TagUpdater.Core.csproj" />
+    <ProjectReference Include="..\Mp3Tag.Core\Mp3Tag.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

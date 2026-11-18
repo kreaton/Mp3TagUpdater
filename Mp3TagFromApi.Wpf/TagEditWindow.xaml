@@ -1,0 +1,72 @@
+<Window x:Class="Mp3TagFromApi.Wpf.TagEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Edit tags"
+        Icon="app.ico"
+        Width="560" SizeToContent="Height" MinWidth="420" ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <StackPanel Margin="24,20,24,20">
+        <TextBlock x:Name="HeaderText" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="SubText" Margin="0,2,0,16" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+        <Grid x:Name="Fields" Grid.IsSharedSizeScope="True">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Label Grid.Row="0" Content="_Title" Target="{Binding ElementName=TitleBox}" VerticalAlignment="Center" Margin="0,0,16,8" />
+            <TextBox x:Name="TitleBox" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" />
+
+            <Label Grid.Row="1" Content="_Artist" Target="{Binding ElementName=ArtistBox}" VerticalAlignment="Center" Margin="0,0,16,8" />
+            <TextBox x:Name="ArtistBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,8" />
+
+            <Label Grid.Row="2" Content="Al_bum" Target="{Binding ElementName=AlbumBox}" VerticalAlignment="Center" Margin="0,0,16,8" />
+            <TextBox x:Name="AlbumBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,8" />
+
+            <Label Grid.Row="3" Content="Album a_rtist" Target="{Binding ElementName=AlbumArtistBox}" VerticalAlignment="Center" Margin="0,0,16,8" />
+            <TextBox x:Name="AlbumArtistBox" Grid.Row="3" Grid.Column="1" Margin="0,0,0,8" />
+
+            <Label Grid.Row="4" Content="_Genre" Target="{Binding ElementName=GenreBox}" VerticalAlignment="Center" Margin="0,0,16,8" />
+            <TextBox x:Name="GenreBox" Grid.Row="4" Grid.Column="1" Margin="0,0,0,8" />
+
+            <Grid Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Label Content="_Year" Target="{Binding ElementName=YearBox}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                <TextBox x:Name="YearBox" Grid.Column="1" InputScope="Number" />
+                <Label Grid.Column="2" Content="Trac_k" Target="{Binding ElementName=TrackBox}" VerticalAlignment="Center" Margin="16,0,12,0" />
+                <TextBox x:Name="TrackBox" Grid.Column="3" InputScope="Number" />
+                <Label Grid.Column="4" Content="_Disc" Target="{Binding ElementName=DiscBox}" VerticalAlignment="Center" Margin="16,0,12,0" />
+                <TextBox x:Name="DiscBox" Grid.Column="5" InputScope="Number" />
+            </Grid>
+        </Grid>
+
+        <TextBlock x:Name="ErrorText" Margin="0,12,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                   Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+
+        <TextBlock x:Name="FooterText" Margin="0,16,0,0" TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="OkButton" Content="OK" IsDefault="True" MinWidth="96"
+                    Style="{DynamicResource AccentButtonStyle}" Click="OnOk" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="96" Margin="8,0,0,0" />
+        </StackPanel>
+    </StackPanel>
+</Window>

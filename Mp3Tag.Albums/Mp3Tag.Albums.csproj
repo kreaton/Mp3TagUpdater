@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tags and renames a folder of mp3 files as one album from Spotify or Discogs: the album model,
+       track matching, the Spotify and Discogs lookups, and the TagLibSharp reading and writing. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Mp3Tag.Albums</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mp3Tag.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TagLibSharp provides read/write access to MP3 (ID3v1/ID3v2) tags -->
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mp3Tag.Text\Mp3Tag.Text.csproj" />
+  </ItemGroup>
+
+</Project>

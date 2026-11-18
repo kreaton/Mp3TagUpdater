@@ -4,9 +4,10 @@ version: 2
 updates:
   - package-ecosystem: "nuget"
     directories:
-      - "/Mp3TagUpdater.Cli"
-      - "/Mp3TagUpdater.Core"
-      - "/Mp3TagUpdater.Tests"
+      - "/Mp3TagFromApi.Wpf"
+      - "/Mp3Tag.Albums"
+      - "/Mp3Tag.Core"
+      - "/Mp3Tag.Tests"
       - "/Mp3TagUpdater.Wpf"
     schedule:
       interval: "weekly"

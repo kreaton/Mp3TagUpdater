@@ -155,25 +155,41 @@ The `Changes` column records which files were changed, or would be by a scan.
 
 | Project | What it is |
 |---|---|
-| `Mp3TagUpdater.Core` | The DLL with all the logic: `new Mp3Library().Run(options, progress, cancellation)` and `Mp3CsvLog.Write` |
-| `Mp3TagUpdater.Cli` | Command line, `Mp3TagUpdater.exe` |
+| `Mp3Tag.Core` | The DLL with all the logic: `new Mp3Library().Run(options, progress, cancellation)` and `Mp3CsvLog.Write`. [README](Mp3Tag.Core/README.md) |
+| `Mp3Tag.Text` | Mojibake repair ("Ã¸" → "ø"), shared by both apps. [README](Mp3Tag.Text/README.md) |
+| `Mp3Tag.Albums` | Album lookup on Spotify and Discogs, track matching, and tagging and renaming a folder as one album. [README](Mp3Tag.Albums/README.md) |
 | `Mp3TagUpdater.Wpf` | Windows GUI, `Mp3TagUpdaterWpf.exe` |
-| `Mp3TagUpdater.Tests` | xUnit tests, which generate their own mp3 files |
+| `Mp3TagFromApi.Wpf` | Companion Windows GUI, `Mp3TagFromApi.exe`: tags one folder as an album from Spotify or Discogs (see below) |
+| `Mp3Tag.Tests` | xUnit tests, which generate their own mp3 files |
 
-The app uses [TagLibSharp](https://github.com/mono/taglib-sharp) to read and write tags. Installs and updates use [Velopack](https://velopack.io).
+The apps use [TagLibSharp](https://github.com/mono/taglib-sharp) to read and write tags. Installs and updates of Mp3TagUpdater use [Velopack](https://velopack.io).
 
-```
-Mp3TagUpdater.Core/
-├── Mp3Run.cs          # run options, progress, messages and result
-├── Mp3TagRecord.cs    # immutable record of one file's details, tags and status
-├── Mp3Library.cs      # scanning, reading, repairing and updating
-├── MisencodedText.cs  # corrects UTF-8 letters read as Windows-1252 ("Ã¸" → "ø")
-├── MojibakeText.cs    # corrects names read as Windows-1252, DOS 437 or 850, for all files and folders
-├── CodePageMap.cs     # maps a code page's characters back to their bytes
-├── ArtistTitleSplit.cs # splits "Artist / Title" and works out the order per folder
-├── FileNameTags.cs    # reads disc, track, artist and title from file names
-├── Id3v2Repair.cs     # byte-level repair of damaged ID3v2 tags
-└── Mp3CsvLog.cs       # CSV log writer
+### Mp3TagFromApi
+
+A companion app with the same kind of list. It works on **one folder** at a time (one album), with no subfolders:
+
+1. Choose or drop a folder. The search box starts with the folder name, with garbled letters fixed.
+2. Pick **Spotify** or **Discogs** and choose **Search**. You can also paste an album or release URL. The first result is loaded. Each result is then compared with the folder, in the background:
+   - green "✓ 12 tracks, 41:30 like the folder": the same number of tracks and about the same total playing time (within 2 %, at least 15 seconds);
+   - "✓ 12 tracks, length not listed": the right number of tracks, but the source has no length for every track (often on Discogs);
+   - orange "12 tracks, but 45:10 (folder 41:23)": probably another edition;
+   - dimmed "9 tracks (folder 12)": can't be used for this folder.
+
+   A line under the Album box sums it up, such as "3 of 10 albums have 12 tracks and about the same playing time as the folder".
+3. The list shows each file's new title, artist, album, number and name with an arrow, in the same columns as Mp3TagUpdater. **Length** is the file's own playing time, measured from its audio. It is never changed.
+4. To correct a value, select one or more files and press **F2** (or right-click, **Edit tags...**). The values you type take the place of the album's and are marked "(by hand)"; with an album, the file name follows the title and track. **Undo edits by hand** on the right-click menu brings back the album's values. Choosing another folder drops the edits.
+5. **Apply** writes the tags (ID3v2.3) and renames the files to `NN - Title.mp3`. On compilations the names are `NN - Artist - Title.mp3`. Modified dates are kept. With **Save album JSON**, the source's album data is saved as `<album>.json` next to the files. The confirmation also offers to rename the folder to the album's name, made valid for Windows (`AC/DC` → `AC-DC`); you can change the name there or clear the tick. When the files already match the album, the button reads **Rename folder...**.
+
+**Fix mojibake** corrects garbled letters ("Ã¸" → "ø"). Without an album, that and your own edits are the only changes. **Scan** reads the folder again, for example after you changed the files in another program. Right-click a file for **Open the folder in Explorer**.
+
+The ⚙ button opens the settings: the version, **Check for updates**, and the API keys. The Spotify client ID and secret and the Discogs personal access token are stored encrypted for your Windows user in `%APPDATA%\Mp3TagFromApi`; nothing is read from environment variables. **Import keys...** reads them from an `appsettings.secret.json`.
+
+A search lists at most 10 albums from Spotify and 25 from Discogs. When it lists that many, a warning says there may be more: add words to the search, such as the year, or paste the album's URL.
+
+Mp3TagFromApi is meant to ship as its own package, separate from the Mp3TagUpdater installer. `Mp3TagFromApi.Wpf\BuildRelease.ps1` builds and packs it with Velopack; add `-LocalOnly` to build without uploading. Releases go to the release-only repository `kreaton/Mp3TagFromApi`, so that the "latest release" link above keeps pointing at Mp3TagUpdater. Until the first release, build and run it from source:
+
+```bash
+dotnet run --project Mp3TagFromApi.Wpf
 ```
 
 ### Build and test
@@ -185,49 +201,8 @@ dotnet build Mp3TagUpdater.slnx
 ```
 
 ```bash
-dotnet test Mp3TagUpdater.Tests
+dotnet test Mp3Tag.Tests
 ```
-
-### Command line
-
-The installer only includes the Windows app. To use the command line, build `Mp3TagUpdater.Cli`, or run it from source:
-
-```bash
-dotnet run --project Mp3TagUpdater.Cli -- "C:\Music\Party"
-```
-
-```
-Mp3TagUpdater <directory> [--apply] [--no-recursive] [--no-log]
-              [--fix-letters] [--fix-names] [--from-names] [--album-from-folder] [--split-titles[=auto|artist-first|title-first]]
-```
-
-| Option | Effect |
-|---|---|
-| `--apply` | Write repairs, tags and new file names to disk. Without it, changes are only proposed. |
-| `--no-recursive` | Scan only the top-level directory, not subfolders. |
-| `--no-log` | Don't write the CSV log. |
-| `--fix-letters` | Correct misencoded letters such as `Ã¸` in tags and file names. |
-| `--fix-names` | Correct misencoded letters in the names of all files and folders, not only mp3 files. |
-| `--album-from-folder` | Set every Album to the folder name, replacing albums that are already set. |
-| `--from-names` | Fill in a missing Title, Artist, Track and Disc from file names such as `1-02 Artist - Title.mp3`. |
-| `--split-titles` | Split "Artist / Title" titles, with the order worked out per folder. Add `=artist-first` or `=title-first` to fix the order. |
-| `-h`, `--help` | Show help. |
-
-The console lists only proposed or actual changes, followed by a summary. Ctrl+C stops after the current file.
-
-```
-  [DRY RUN] Would repair Damaged song.mp3: Corrected ID3v2 version byte 0x23 to 0x03
-  [DRY RUN] Would set Album to "Party": No album.mp3
-Summary: OK 1, Repairable 1, Updatable 1
-No files were modified. Pass --apply to write these changes.
-Log written to C:\Music\Party\mp3-log-20261105-110130.csv
-```
-
-| Exit code | Meaning |
-|---|---|
-| `0` | The run finished |
-| `1` | Invalid arguments, a missing directory, or the log couldn't be written |
-| `130` | Cancelled |
 
 ### Releases
 
