@@ -27,7 +27,7 @@ Used to build, test or render promotional material only; not part of the shipped
 
 | Asset(s) | Origin | Licence |
 |---|---|---|
-| `Mp3TagUpdater.Wpf/app.ico`, `images/banner.png` | The tile and music note are reused from the author's Mp3Player icon, which the author AI-generated with an image-generation tool. The green update badge, the layout and the banner were drawn in code (Python with Pillow) with Claude Code, under the author's direction. The banner text is set in Segoe UI from the Windows fonts folder and is rendered into the image; no font file is distributed | MIT (as part of this project) |
+| `Mp3TagUpdater.Wpf/app.ico`, `images/banner.png` | The tile and music note are reused from the author's Audiofile Player (formerly MP3 Player) icon, which the author AI-generated with an image-generation tool. The green update badge, the layout and the banner were drawn in code (Python with Pillow) with Claude Code, under the author's direction. The banner text is set in Segoe UI from the Windows fonts folder and is rendered into the image; no font file is distributed | MIT (as part of this project) |
 | `Mp3TagFromApi.Wpf/app.ico` | The Mp3TagUpdater icon above, with the green update badge replaced by a yellow lightning bolt on a dark blue disc, drawn in code (PowerShell with System.Drawing) with Claude Code, under the author's direction | MIT (as part of this project) |
 
 ## Online services (Mp3TagFromApi)
